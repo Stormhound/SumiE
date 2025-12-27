@@ -1,49 +1,58 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using Unity.Jobs;
+using Unity.Collections;
+using Unity.Burst;
+using Unity.Mathematics;
 
 [RequireComponent(typeof(LineRenderer))]
 public class LassoPainter : MonoBehaviour
 {
-    [Header("Stabilizer Settings")]
-    [Range(0f, 0.5f)]
-    public float smoothTime = 0.05f; // Higher = "Lazier" brush (more stable)
-    public float minPointDistance = 0.1f;
-
-    [Header("Lasso Settings")]
-    public float closeThreshold = 0.5f; // Distance to close loop on release
-    public float maxInk = 100f;
-    public float inkConsumptionRate = 10f;
-
-    [Header("Visual Settings")]
-    public Color fillColor = new Color(1, 0, 0, 0.5f);
-    public int blurIterations = 1; // Set to 0 for sharp, 1-2 for soft edges
+    [Header("References")]
+    public ScatterPoints scatterScript;
+    public Camera cam;
+    public LayerMask inkLayer;
     public RawImage outputDisplay;
 
-    [Header("Performance")]
-    [Range(0.1f, 1f)]
-    public float resolutionScale = 0.5f;
+    [Header("Visual Settings")]
+    public Color centerColor = new Color(1, 0, 0, 1f);
+    [Range(0, 10)] public int blurPasses = 3;
+    public int blurRadius = 2;
+    [Range(0.1f, 1f)] public float resolutionScale = 0.5f;
+
+    [Tooltip("Distance in pixels from the edge where the ink becomes fully opaque.")]
+    public float gradientWidth = 24.0f;
+    [Tooltip("Controls the falloff curve. 1 = Linear, <1 = Softer, >1 = Sharper")]
+    [Range(0.1f, 3.0f)] public float smoothness = 1.0f; // NEW SLIDER
+
+    [Header("Interaction")]
+    [Range(0f, 0.5f)] public float smoothTime = 0.05f;
+    public float minPointDistance = 0.1f;
+    public float closeThreshold = 0.5f;
+
+    [Header("Animation")]
+    [Range(0.1f, 2.0f)] public float fillDuration = 0.5f;
 
     // Internal State
     private LineRenderer lr;
     private List<Vector2> worldPoints = new List<Vector2>();
     private Texture2D drawTexture;
-    private Color[] clearColors;
     private bool isDrawing = false;
-    private Camera mainCam;
-
-    // Stabilizer vars
+    private bool isCalculating = false;
     private Vector2 currentSmoothPos;
     private Vector2 smoothVelocity;
 
-    // Cached dimensions
-    private int texWidth;
-    private int texHeight;
+    // Cache
+    private int texWidth, texHeight;
+    private NativeArray<Color32> backupTextureState;
 
     void Start()
     {
         lr = GetComponent<LineRenderer>();
-        mainCam = Camera.main;
+        if (cam == null) cam = Camera.main;
+
         InitializeTexture();
     }
 
@@ -52,71 +61,51 @@ public class LassoPainter : MonoBehaviour
         texWidth = Mathf.RoundToInt(Screen.width * resolutionScale);
         texHeight = Mathf.RoundToInt(Screen.height * resolutionScale);
 
-        drawTexture = new Texture2D(texWidth, texHeight);
-        drawTexture.filterMode = FilterMode.Bilinear; // Helps smooth scaling
+        drawTexture = new Texture2D(texWidth, texHeight, TextureFormat.RGBA32, false);
+        drawTexture.filterMode = FilterMode.Bilinear;
 
-        clearColors = new Color[texWidth * texHeight];
-        for (int i = 0; i < clearColors.Length; i++) clearColors[i] = Color.clear;
-
-        drawTexture.SetPixels(clearColors);
+        var pixels = drawTexture.GetRawTextureData<Color32>();
+        new ClearTextureJob { pixelData = pixels }.Run(pixels.Length);
         drawTexture.Apply();
 
-        if (outputDisplay != null)
+        if (outputDisplay != null) outputDisplay.texture = drawTexture;
+
+        if (scatterScript != null)
         {
-            outputDisplay.texture = drawTexture;
-            RectTransform rt = outputDisplay.rectTransform;
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
+            scatterScript.GenerateAndRenderToTexture(drawTexture, texWidth, texHeight);
         }
     }
 
     void Update()
     {
-        // 1. Mouse Down
-        if (Input.GetMouseButtonDown(0))
-        {
-            StartStroke();
-        }
+        if (isCalculating) return;
 
-        // 2. Mouse Hold
-        if (Input.GetMouseButton(0) && isDrawing)
-        {
-            UpdateStroke();
-        }
-
-        // 3. Mouse Up (NOW handles the closing logic)
-        if (Input.GetMouseButtonUp(0))
-        {
-            EndStroke();
-        }
+        if (Input.GetMouseButtonDown(0)) StartStroke();
+        if (Input.GetMouseButton(0) && isDrawing) UpdateStroke();
+        if (Input.GetMouseButtonUp(0)) EndStroke();
     }
 
     void StartStroke()
     {
-        isDrawing = true;
-        worldPoints.Clear();
-        lr.positionCount = 0;
+        Vector2 mousePos = GetMouseWorldPos();
+        RaycastHit2D hit = Physics2D.Raycast(mousePos, Vector2.zero, float.MaxValue, inkLayer);
 
-        // Reset Texture
-        drawTexture.SetPixels(clearColors);
-        drawTexture.Apply();
-
-        // Initialize stabilizer to current mouse pos so it doesn't "jump"
-        currentSmoothPos = GetMouseWorldPos();
-        AddPoint(currentSmoothPos);
+        if (hit.collider != null)
+        {
+            isDrawing = true;
+            worldPoints.Clear();
+            lr.positionCount = 0;
+            currentSmoothPos = mousePos;
+            AddPoint(mousePos);
+        }
     }
 
     void UpdateStroke()
     {
-        // STABILIZER LOGIC
         Vector2 targetPos = GetMouseWorldPos();
-        // SmoothDamp creates that "dragged by a string" feeling
         currentSmoothPos = Vector2.SmoothDamp(currentSmoothPos, targetPos, ref smoothVelocity, smoothTime);
 
-        // Only add point if moved enough
-        if (worldPoints.Count > 0 && Vector2.Distance(worldPoints[worldPoints.Count - 1], currentSmoothPos) > minPointDistance)
+        if (worldPoints.Count == 0 || Vector2.Distance(worldPoints[worldPoints.Count - 1], currentSmoothPos) > minPointDistance)
         {
             AddPoint(currentSmoothPos);
         }
@@ -125,19 +114,26 @@ public class LassoPainter : MonoBehaviour
     void EndStroke()
     {
         isDrawing = false;
+        Vector2 releasePos = GetMouseWorldPos();
 
-        // CHECK CLOSURE ON RELEASE
         if (worldPoints.Count > 5)
         {
-            // Compare the very last smooth point with the start point
-            if (Vector2.Distance(worldPoints[worldPoints.Count - 1], worldPoints[0]) < closeThreshold)
+            if (Vector2.Distance(releasePos, worldPoints[0]) < closeThreshold ||
+                Vector2.Distance(worldPoints[worldPoints.Count - 1], worldPoints[0]) < closeThreshold)
             {
-                // It's a loop! Fill it.
-                FillShape(worldPoints);
+                // 1. Visuals
+                StartCoroutine(RunJobsAndAnimate());
+
+                // 2. Physics (Regenerate Collider)
+                if (scatterScript != null)
+                {
+                    scatterScript.AddLassoCollider(worldPoints);
+                }
+
+                lr.positionCount = 0;
+                return;
             }
         }
-
-        // Optional: Hide line immediately or fade it out
         lr.positionCount = 0;
     }
 
@@ -148,128 +144,365 @@ public class LassoPainter : MonoBehaviour
         lr.SetPosition(worldPoints.Count - 1, pos);
     }
 
-    void FillShape(List<Vector2> points)
+    IEnumerator RunJobsAndAnimate()
     {
-        List<Vector2Int> pixelPoints = new List<Vector2Int>();
+        isCalculating = true;
 
-        // Convert to Coords
-        foreach (Vector2 p in points)
+        NativeArray<Color32> currentPixels = drawTexture.GetRawTextureData<Color32>();
+        if (backupTextureState.IsCreated) backupTextureState.Dispose();
+        backupTextureState = new NativeArray<Color32>(currentPixels, Allocator.Persistent);
+
+        // Prepare Points
+        NativeArray<int2> pointBuffer = new NativeArray<int2>(worldPoints.Count, Allocator.TempJob);
+        int minX = 0; int maxX = texWidth - 1;
+        int minY = 0; int maxY = texHeight - 1;
+
+        for (int i = 0; i < worldPoints.Count; i++)
         {
-            Vector3 screenPos = mainCam.WorldToScreenPoint(p);
-            int x = Mathf.RoundToInt(screenPos.x * resolutionScale);
-            int y = Mathf.RoundToInt(screenPos.y * resolutionScale);
-            pixelPoints.Add(new Vector2Int(x, y));
+            Vector3 sPos = cam.WorldToScreenPoint(worldPoints[i]);
+            int x = Mathf.Clamp(Mathf.RoundToInt(sPos.x * resolutionScale), 0, texWidth - 1);
+            int y = Mathf.Clamp(Mathf.RoundToInt(sPos.y * resolutionScale), 0, texHeight - 1);
+            pointBuffer[i] = new int2(x, y);
         }
 
-        Color[] pixels = drawTexture.GetPixels();
+        int jobW = texWidth;
+        int jobH = texHeight;
 
-        // Track bounds for faster blurring
-        int minX = texWidth, maxX = 0;
-        int minY = texHeight, maxY = 0;
+        // Job Buffers
+        NativeArray<float> distGrid = new NativeArray<float>(jobW * jobH, Allocator.TempJob);
+        NativeArray<Color32> finalFillColors = new NativeArray<Color32>(jobW * jobH, Allocator.TempJob);
+        NativeList<PixelSortData> sortKeys = new NativeList<PixelSortData>(jobW * jobH, Allocator.TempJob);
 
-        foreach (var p in pixelPoints)
+        // 1. Mask from Texture (Using strict >0 threshold to prevent data loss)
+        var maskJob = new MaskFromTextureJob
         {
-            if (p.x < minX) minX = p.x;
-            if (p.x > maxX) maxX = p.x;
-            if (p.y < minY) minY = p.y;
-            if (p.y > maxY) maxY = p.y;
+            texturePixels = backupTextureState,
+            outputGrid = distGrid,
+            width = jobW,
+            height = jobH,
+            offsetX = minX,
+            offsetY = minY
+        };
+        JobHandle handle = maskJob.Schedule(jobW * jobH, 64);
+
+        // 2. Add New Shape (Additive)
+        var scanlineJob = new ScanlineJob
+        {
+            points = pointBuffer,
+            outputGrid = distGrid,
+            width = jobW,
+            height = jobH,
+            offsetX = minX,
+            offsetY = minY
+        };
+        handle = scanlineJob.Schedule(handle);
+
+        // 3. Distance Transform
+        handle = new ChamferJobPass1 { grid = distGrid, width = jobW, height = jobH }.Schedule(handle);
+        handle = new ChamferJobPass2 { grid = distGrid, width = jobW, height = jobH }.Schedule(handle);
+
+        // 4. Gradient (With Smoothness Slider)
+        handle = new GradientJob
+        {
+            grid = distGrid,
+            outputColors = finalFillColors,
+            gradientWidth = gradientWidth,
+            smoothness = smoothness, // Pass slider value
+            centerColor = centerColor
+        }.Schedule(jobW * jobH, 64, handle);
+
+        // 5. Blur
+        NativeArray<Color32> blurBuffer = new NativeArray<Color32>(jobW * jobH, Allocator.TempJob);
+        for (int i = 0; i < blurPasses; i++)
+        {
+            handle = new BlurHorzJob { source = finalFillColors, destination = blurBuffer, width = jobW, height = jobH, radius = blurRadius }.Schedule(jobW * jobH, 64, handle);
+            handle = new BlurVertJob { source = blurBuffer, destination = finalFillColors, width = jobW, height = jobH, radius = blurRadius }.Schedule(jobW * jobH, 64, handle);
         }
 
-        // Clamp bounds
-        minX = Mathf.Clamp(minX, 0, texWidth - 1);
-        maxX = Mathf.Clamp(maxX, 0, texWidth - 1);
-        minY = Mathf.Clamp(minY, 0, texHeight - 1);
-        maxY = Mathf.Clamp(maxY, 0, texHeight - 1);
+        // 6. Sort
+        handle = new CollectSortDataJob { colors = finalFillColors, sortList = sortKeys, globalOffsetX = minX, globalOffsetY = minY, totalCanvasWidth = texWidth, jobWidth = jobW }.Schedule(handle);
+        handle = new SortPixelJob { list = sortKeys }.Schedule(handle);
 
-        // --- SCANLINE FILL ---
-        for (int y = minY; y <= maxY; y++)
+        handle.Complete();
+
+        // 7. Animate (Overwrite Mode to ensure new gradient shape is authoritative)
+        int totalPixels = sortKeys.Length;
+        float startTime = Time.time;
+        int processedCount = 0;
+
+        NativeArray<Color32> liveTexture = drawTexture.GetRawTextureData<Color32>();
+
+        while (processedCount < totalPixels)
         {
-            List<int> nodes = new List<int>();
-            int j = pixelPoints.Count - 1;
-            for (int i = 0; i < pixelPoints.Count; i++)
+            float t = (Time.time - startTime) / fillDuration;
+            int targetCount = Mathf.Clamp(Mathf.FloorToInt(t * totalPixels), 0, totalPixels);
+
+            while (processedCount < targetCount)
             {
-                if ((pixelPoints[i].y < y && pixelPoints[j].y >= y) || (pixelPoints[j].y < y && pixelPoints[i].y >= y))
-                {
-                    float intersectX = pixelPoints[i].x + (float)(y - pixelPoints[i].y) / (pixelPoints[j].y - pixelPoints[i].y) * (pixelPoints[j].x - pixelPoints[i].x);
-                    nodes.Add((int)intersectX);
-                }
-                j = i;
+                PixelSortData data = sortKeys[processedCount];
+                liveTexture[data.globalIndex] = data.color;
+                processedCount++;
             }
-            nodes.Sort();
-            for (int k = 0; k < nodes.Count; k += 2)
-            {
-                if (k + 1 >= nodes.Count) break;
-                int startX = Mathf.Clamp(nodes[k], 0, texWidth - 1);
-                int endX = Mathf.Clamp(nodes[k + 1], 0, texWidth - 1);
-                for (int x = startX; x < endX; x++)
-                {
-                    pixels[y * texWidth + x] = fillColor;
-                }
-            }
+
+            drawTexture.Apply();
+            yield return null;
         }
 
-        // --- BLUR PASS (Anti-Aliasing) ---
-        if (blurIterations > 0)
-        {
-            pixels = ApplyBoxBlur(pixels, minX, maxX, minY, maxY, blurIterations);
-        }
+        // Cleanup
+        pointBuffer.Dispose();
+        distGrid.Dispose();
+        finalFillColors.Dispose();
+        blurBuffer.Dispose();
+        sortKeys.Dispose();
+        if (backupTextureState.IsCreated) backupTextureState.Dispose();
 
-        drawTexture.SetPixels(pixels);
-        drawTexture.Apply();
-    }
-
-    // A fast Box Blur that only runs inside the modified bounds
-    Color[] ApplyBoxBlur(Color[] sourcePixels, int minX, int maxX, int minY, int maxY, int iterations)
-    {
-        // Expand bounds slightly to avoid clipping the blur
-        int pad = iterations * 2;
-        minX = Mathf.Clamp(minX - pad, 0, texWidth - 1);
-        maxX = Mathf.Clamp(maxX + pad, 0, texWidth - 1);
-        minY = Mathf.Clamp(minY - pad, 0, texHeight - 1);
-        maxY = Mathf.Clamp(maxY + pad, 0, texHeight - 1);
-
-        int w = texWidth;
-
-        // Temporary buffer
-        Color[] buffer = (Color[])sourcePixels.Clone();
-
-        for (int it = 0; it < iterations; it++)
-        {
-            for (int y = minY; y <= maxY; y++)
-            {
-                for (int x = minX; x <= maxX; x++)
-                {
-                    // Simple 3x3 Box Kernel
-                    Color sum = Color.clear;
-                    int count = 0;
-
-                    for (int ky = -1; ky <= 1; ky++)
-                    {
-                        for (int kx = -1; kx <= 1; kx++)
-                        {
-                            int px = x + kx;
-                            int py = y + ky;
-
-                            if (px >= 0 && px < w && py >= 0 && py < texHeight)
-                            {
-                                sum += sourcePixels[py * w + px];
-                                count++;
-                            }
-                        }
-                    }
-                    buffer[y * w + x] = sum / count;
-                }
-            }
-            // Swap buffers for next iteration
-            System.Array.Copy(buffer, sourcePixels, buffer.Length);
-        }
-        return sourcePixels;
+        isCalculating = false;
     }
 
     Vector2 GetMouseWorldPos()
     {
         Vector3 mouseScreen = Input.mousePosition;
-        mouseScreen.z = -mainCam.transform.position.z;
-        return mainCam.ScreenToWorldPoint(mouseScreen);
+        mouseScreen.z = -cam.transform.position.z;
+        return cam.ScreenToWorldPoint(mouseScreen);
     }
+
+    void OnDestroy()
+    {
+        if (backupTextureState.IsCreated) backupTextureState.Dispose();
+    }
+}
+
+// -----------------------------------------------------------------------------
+// BURST JOBS
+// -----------------------------------------------------------------------------
+
+[BurstCompile]
+struct ClearTextureJob : IJobParallelFor
+{
+    public NativeArray<Color32> pixelData;
+    public void Execute(int index) => pixelData[index] = new Color32(0, 0, 0, 0);
+}
+
+[BurstCompile]
+struct MaskFromTextureJob : IJobParallelFor
+{
+    [ReadOnly] public NativeArray<Color32> texturePixels;
+    public NativeArray<float> outputGrid;
+    public int width, height, offsetX, offsetY;
+
+    public void Execute(int index)
+    {
+        int y = index / width;
+        int x = index % width;
+        int globalIndex = (y + offsetY) * width + (x + offsetX);
+
+        if (globalIndex >= 0 && globalIndex < texturePixels.Length)
+        {
+            // FIX FOR DATA LOSS: Treat ANY alpha > 0 as "Inside" so we don't erode faint edges
+            outputGrid[index] = (texturePixels[globalIndex].a > 0) ? -1f : 0f;
+        }
+        else
+        {
+            outputGrid[index] = 0f;
+        }
+    }
+}
+
+[BurstCompile]
+struct ScanlineJob : IJob
+{
+    [ReadOnly] public NativeArray<int2> points;
+    public NativeArray<float> outputGrid;
+    public int width, height, offsetX, offsetY;
+
+    public void Execute()
+    {
+        // Don't clear! Add to existing mask.
+        for (int y = 0; y < height; y++)
+        {
+            int globalY = y + offsetY;
+            NativeList<int> nodes = new NativeList<int>(32, Allocator.Temp);
+
+            int j = points.Length - 1;
+            for (int i = 0; i < points.Length; i++)
+            {
+                int2 pi = points[i];
+                int2 pj = points[j];
+
+                if ((pi.y < globalY && pj.y >= globalY) || (pj.y < globalY && pi.y >= globalY))
+                {
+                    float intersect = pi.x + (float)(globalY - pi.y) / (pj.y - pi.y) * (pj.x - pi.x);
+                    nodes.Add((int)intersect);
+                }
+                j = i;
+            }
+
+            nodes.Sort();
+            for (int k = 0; k < nodes.Length; k += 2)
+            {
+                if (k + 1 >= nodes.Length) break;
+                int startX = Mathf.Clamp(nodes[k] - offsetX, 0, width - 1);
+                int endX = Mathf.Clamp(nodes[k + 1] - offsetX, 0, width - 1);
+                for (int x = startX; x < endX; x++)
+                {
+                    outputGrid[y * width + x] = -1f;
+                }
+            }
+            nodes.Dispose();
+        }
+    }
+}
+
+[BurstCompile]
+struct ChamferJobPass1 : IJob
+{
+    public NativeArray<float> grid;
+    public int width, height;
+    public void Execute()
+    {
+        for (int i = 0; i < grid.Length; i++) if (grid[i] < 0) grid[i] = 99999f;
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int idx = y * width + x;
+                if (grid[idx] > 0)
+                {
+                    float minVal = 99999f;
+                    if (x > 0) minVal = math.min(minVal, grid[y * width + (x - 1)] + 1.0f);
+                    if (y > 0) minVal = math.min(minVal, grid[(y - 1) * width + x] + 1.0f);
+                    if (x > 0 && y > 0) minVal = math.min(minVal, grid[(y - 1) * width + (x - 1)] + 1.414f);
+                    if (x < width - 1 && y > 0) minVal = math.min(minVal, grid[(y - 1) * width + (x + 1)] + 1.414f);
+                    if (minVal < grid[idx]) grid[idx] = minVal;
+                }
+            }
+        }
+    }
+}
+
+[BurstCompile]
+struct ChamferJobPass2 : IJob
+{
+    public NativeArray<float> grid;
+    public int width, height;
+    public void Execute()
+    {
+        for (int y = height - 1; y >= 0; y--)
+        {
+            for (int x = width - 1; x >= 0; x--)
+            {
+                int idx = y * width + x;
+                if (grid[idx] > 0)
+                {
+                    float minVal = grid[idx];
+                    if (x < width - 1) minVal = math.min(minVal, grid[y * width + (x + 1)] + 1.0f);
+                    if (y < height - 1) minVal = math.min(minVal, grid[(y + 1) * width + x] + 1.0f);
+                    if (x < width - 1 && y < height - 1) minVal = math.min(minVal, grid[(y + 1) * width + (x + 1)] + 1.414f);
+                    if (x > 0 && y < height - 1) minVal = math.min(minVal, grid[(y + 1) * width + (x - 1)] + 1.414f);
+                    grid[idx] = minVal;
+                }
+            }
+        }
+    }
+}
+
+[BurstCompile]
+struct GradientJob : IJobParallelFor
+{
+    [ReadOnly] public NativeArray<float> grid;
+    public NativeArray<Color32> outputColors;
+    public float gradientWidth;
+    public float smoothness; // Added smoothness control
+    public Color32 centerColor;
+
+    public void Execute(int index)
+    {
+        float d = grid[index];
+        if (d <= 0 || d > 99990f) { outputColors[index] = new Color32(0, 0, 0, 0); return; }
+
+        float normalized = math.clamp(d / gradientWidth, 0f, 1f);
+
+        // NEW: Smoothness control (Gamma correction style)
+        // normalized^smoothness 
+        float alpha = math.pow(normalized, smoothness);
+
+        outputColors[index] = new Color32(centerColor.r, centerColor.g, centerColor.b, (byte)(alpha * 255));
+    }
+}
+
+[BurstCompile]
+struct BlurHorzJob : IJobParallelFor
+{
+    [ReadOnly] public NativeArray<Color32> source;
+    public NativeArray<Color32> destination;
+    public int width, height, radius;
+    public void Execute(int index)
+    {
+        int y = index / width; int x = index % width;
+        float4 sum = float4.zero; int count = 0;
+        for (int k = -radius; k <= radius; k++)
+        {
+            int px = math.clamp(x + k, 0, width - 1);
+            Color32 c = source[y * width + px];
+            sum += new float4(c.r, c.g, c.b, c.a);
+            count++;
+        }
+        sum /= count;
+        destination[index] = new Color32((byte)sum.x, (byte)sum.y, (byte)sum.z, (byte)sum.w);
+    }
+}
+
+[BurstCompile]
+struct BlurVertJob : IJobParallelFor
+{
+    [ReadOnly] public NativeArray<Color32> source;
+    public NativeArray<Color32> destination;
+    public int width, height, radius;
+    public void Execute(int index)
+    {
+        int y = index / width; int x = index % width;
+        float4 sum = float4.zero; int count = 0;
+        for (int k = -radius; k <= radius; k++)
+        {
+            int py = math.clamp(y + k, 0, height - 1);
+            Color32 c = source[py * width + x];
+            sum += new float4(c.r, c.g, c.b, c.a);
+            count++;
+        }
+        sum /= count;
+        destination[index] = new Color32((byte)sum.x, (byte)sum.y, (byte)sum.z, (byte)sum.w);
+    }
+}
+
+struct PixelSortData : System.IComparable<PixelSortData>
+{
+    public int globalIndex; public Color32 color; public float sortKey;
+    public int CompareTo(PixelSortData other) => other.sortKey.CompareTo(sortKey);
+}
+
+[BurstCompile]
+struct CollectSortDataJob : IJob
+{
+    [ReadOnly] public NativeArray<Color32> colors;
+    public NativeList<PixelSortData> sortList;
+    public int globalOffsetX, globalOffsetY, totalCanvasWidth, jobWidth;
+    public void Execute()
+    {
+        for (int i = 0; i < colors.Length; i++)
+        {
+            if (colors[i].a > 0) // Lowered threshold to catch everything
+            {
+                int localY = i / jobWidth; int localX = i % jobWidth;
+                int globalIndex = (localY + globalOffsetY) * totalCanvasWidth + (localX + globalOffsetX);
+                sortList.Add(new PixelSortData { globalIndex = globalIndex, color = colors[i], sortKey = colors[i].a });
+            }
+        }
+    }
+}
+
+[BurstCompile]
+struct SortPixelJob : IJob
+{
+    public NativeList<PixelSortData> list;
+    public void Execute() => list.Sort();
 }
