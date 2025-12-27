@@ -12,22 +12,41 @@ public class ScatterPoints : MonoBehaviour
 {
     [Header("Settings")]
     public int pointCount = 20;
+    [Tooltip("Minimum distance between points (0-1 space)")]
     public float minDistance = 0.2f;
+    [Tooltip("Radius of each blob (0-1 space)")]
     public float pointRadius = 0.15f;
+    [Tooltip("How detailed the collider circles are (vertices per circle)")]
     public int colliderSegments = 16;
+
+    [Header("Border Settings")]
     [Range(0f, 0.2f)] public float edgePadding = 0.01f;
+
+    [Header("Visuals")]
     public Color blobColor = Color.red;
 
     private PolygonCollider2D polyCollider;
+
+    // --- MEMORY STORAGE ---
+    private List<float2> scatterBlobLocations = new List<float2>();
+    private List<List<Vector2>> lassoPaths = new List<List<Vector2>>();
 
     void Awake()
     {
         polyCollider = GetComponent<PolygonCollider2D>();
     }
 
+    /// <summary>
+    /// Called by LassoPainter to initialize the board.
+    /// Clears all history and generates new random blobs.
+    /// </summary>
     public void GenerateAndRenderToTexture(Texture2D targetTexture, int width, int height)
     {
-        List<float2> points = new List<float2>();
+        // 1. Clear History
+        scatterBlobLocations.Clear();
+        lassoPaths.Clear();
+
+        // 2. Generate Blobs (CPU)
         int maxAttempts = 10000;
         int attempts = 0;
 
@@ -36,20 +55,26 @@ public class ScatterPoints : MonoBehaviour
         float maxPos = 1.0f - totalSafeMargin;
         if (minPos >= maxPos) { minPos = 0.5f; maxPos = 0.5f; }
 
-        while (points.Count < pointCount && attempts < maxAttempts)
+        while (scatterBlobLocations.Count < pointCount && attempts < maxAttempts)
         {
             attempts++;
             float2 candidate = new float2(Random.Range(minPos, maxPos), Random.Range(minPos, maxPos));
 
             bool valid = true;
-            for (int i = 0; i < points.Count; i++)
+            for (int i = 0; i < scatterBlobLocations.Count; i++)
             {
-                if (math.distance(candidate, points[i]) < minDistance) { valid = false; break; }
+                if (math.distance(candidate, scatterBlobLocations[i]) < minDistance)
+                {
+                    valid = false;
+                    break;
+                }
             }
-            if (valid) points.Add(candidate);
+
+            if (valid) scatterBlobLocations.Add(candidate);
         }
 
-        NativeArray<float2> pointArray = new NativeArray<float2>(points.ToArray(), Allocator.TempJob);
+        // 3. Render Visuals (Burst)
+        NativeArray<float2> pointArray = new NativeArray<float2>(scatterBlobLocations.ToArray(), Allocator.TempJob);
         NativeArray<Color32> textureData = targetTexture.GetRawTextureData<Color32>();
 
         var job = new SplatterRenderJob
@@ -64,17 +89,35 @@ public class ScatterPoints : MonoBehaviour
 
         job.Schedule(textureData.Length, 64).Complete();
         targetTexture.Apply();
-
-        GenerateColliders(points);
-
         pointArray.Dispose();
+
+        // 4. Generate Initial Collider
+        RegenerateAllColliders();
     }
 
-    void GenerateColliders(List<float2> points)
+    /// <summary>
+    /// Adds a new lasso shape to history and rebuilds the collider.
+    /// </summary>
+    public void AddLassoCollider(List<Vector2> worldPoints)
+    {
+        if (worldPoints == null || worldPoints.Count < 3) return;
+
+        // Store a copy of the points
+        lassoPaths.Add(new List<Vector2>(worldPoints));
+
+        // Rebuild everything
+        RegenerateAllColliders();
+    }
+
+    /// <summary>
+    /// Deletes the old collider and rebuilds it from the stored blobs and lasso paths.
+    /// </summary>
+    void RegenerateAllColliders()
     {
         LassoPainter manager = FindObjectOfType<LassoPainter>();
         if (manager == null || manager.outputDisplay == null) return;
 
+        // --- 1. SETUP WORLD SPACE MATH ---
         Vector3[] corners = new Vector3[4];
         manager.outputDisplay.rectTransform.GetWorldCorners(corners);
 
@@ -85,13 +128,16 @@ public class ScatterPoints : MonoBehaviour
         float worldHeight = upDir.magnitude;
         float worldRadius = pointRadius * worldHeight;
 
-        polyCollider.pathCount = points.Count;
+        // --- 2. RESET COLLIDER ---
+        polyCollider.pathCount = scatterBlobLocations.Count + lassoPaths.Count;
 
-        for (int i = 0; i < points.Count; i++)
+        // --- 3. REBUILD BLOB PATHS ---
+        for (int i = 0; i < scatterBlobLocations.Count; i++)
         {
-            float2 p = points[i];
+            float2 p = scatterBlobLocations[i];
+
+            // Map 0-1 to World Space
             Vector3 center = bottomLeft + (rightDir * p.x) + (upDir * p.y);
-            Vector3 localCenter = transform.InverseTransformPoint(center);
 
             Vector2[] circlePath = new Vector2[colliderSegments];
             float angleStep = (2f * Mathf.PI) / colliderSegments;
@@ -99,33 +145,32 @@ public class ScatterPoints : MonoBehaviour
             for (int j = 0; j < colliderSegments; j++)
             {
                 float angle = j * angleStep;
-                float x = Mathf.Cos(angle) * worldRadius;
-                float y = Mathf.Sin(angle) * worldRadius;
-                circlePath[j] = new Vector2(localCenter.x + x, localCenter.y + y);
+                Vector3 worldVertex = center + new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0) * worldRadius;
+                circlePath[j] = transform.InverseTransformPoint(worldVertex);
             }
+
             polyCollider.SetPath(i, circlePath);
         }
-    }
 
-    // --- NEW METHOD FOR REGENERATING COLLIDER ---
-    public void AddLassoCollider(List<Vector2> worldPoints)
-    {
-        if (polyCollider == null || worldPoints == null || worldPoints.Count < 3) return;
-
-        Vector2[] localPoints = new Vector2[worldPoints.Count];
-        for (int i = 0; i < worldPoints.Count; i++)
+        // --- 4. REBUILD LASSO PATHS ---
+        for (int i = 0; i < lassoPaths.Count; i++)
         {
-            localPoints[i] = transform.InverseTransformPoint(worldPoints[i]);
-        }
+            List<Vector2> pathWorldPoints = lassoPaths[i];
+            Vector2[] localPath = new Vector2[pathWorldPoints.Count];
 
-        int newPathIndex = polyCollider.pathCount;
-        polyCollider.pathCount++;
-        polyCollider.SetPath(newPathIndex, localPoints);
+            for (int j = 0; j < pathWorldPoints.Count; j++)
+            {
+                localPath[j] = transform.InverseTransformPoint(pathWorldPoints[j]);
+            }
+
+            // Offset index by the number of blobs we already added
+            polyCollider.SetPath(scatterBlobLocations.Count + i, localPath);
+        }
     }
 }
 
 // -----------------------------------------------------------------------------
-// BURST JOBS (Same as before)
+// BURST JOBS (Unchanged)
 // -----------------------------------------------------------------------------
 
 [BurstCompile]
