@@ -3,13 +3,13 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-public class UIManager : MonoBehaviour
+public class UIManagers : MonoBehaviour
 {
     [SerializeField] private GameObject MainMenu;
     [SerializeField] private GameObject SettingsMenu;
+
+
   
-
-
     public void StartButton()
     {
         SceneManager.LoadScene("GameScene");
@@ -17,7 +17,7 @@ public class UIManager : MonoBehaviour
 
     public void QuitButton()
     {
-        Application.Quit();
+        UnityEditor.EditorApplication.isPlaying = false;
     }
 
     public void SettingsButton()

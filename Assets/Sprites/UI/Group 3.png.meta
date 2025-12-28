@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: c3ba1e439a7604d4b97395a3358d7989
+guid: 91f15de51ad508b45ab1aeb99628732d
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 6575106811124688872
-    second: file cover - 3_0
+      213: 6396534975232724203
+    second: 28_Ara_2025_20_53_41-removebg-preview_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -100,13 +100,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: file cover - 3_0
+      name: 28_Ara_2025_20_53_41-removebg-preview_0
       rect:
         serializedVersion: 2
         x: 0
-        y: 0
-        width: 7680
-        height: 4320
+        y: 107
+        width: 612
+        height: 167
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -115,8 +115,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 8e7a65deec87f3b50800000000000000
-      internalID: 6575106811124688872
+      spriteID: beccb107bae05c850800000000000000
+      internalID: 6396534975232724203
       vertices: []
       indices: 
       edges: []
@@ -135,7 +135,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      file cover - 3_0: 6575106811124688872
+      28_Ara_2025_20_53_41-removebg-preview_0: 6396534975232724203
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

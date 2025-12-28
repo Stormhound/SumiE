@@ -8,43 +8,58 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private Button startGameButton;
     [SerializeField] private Button quitButton;
     [SerializeField] private Button settingsButton;
+    [SerializeField] private Button BackButton;
 
     [Header("Animation Settings")]
     [SerializeField] private float buttonHoverScale = 1.1f;
     [SerializeField] private float animationSpeed = 0.2f;
+
+    [Header("SFX Source")]
+    [SerializeField] private AudioSource SFXSource;
+    [SerializeField] private AudioClip ButtonSound;
     
     private Coroutine currentHoverCoroutine;
     private Coroutine currentClickCoroutine;
 
     private void Start()
     {
-        SetupButtons();
+        SetupButtons();    
+    }
+
+    private void PlayClickSound()
+    {
+        SFXSource.PlayOneShot(ButtonSound);
     }
 
     private void SetupButtons()
     {
         if (startGameButton != null)
         {
-            startGameButton.onClick.AddListener(OnStartGameClicked);
-            AddButtonHoverEffect(startGameButton);
+            AddButtonHoverEffect(startGameButton);     
         }
 
         if (quitButton != null)
-        {
-            quitButton.onClick.AddListener(OnQuitClicked);
-            AddButtonHoverEffect(quitButton);
+        {          
+            AddButtonHoverEffect(quitButton);      
         }
 
         if (settingsButton != null)
-        {
-            settingsButton.onClick.AddListener(OnSettingsClicked);
-            AddButtonHoverEffect(settingsButton);
+        {       
+            AddButtonHoverEffect(settingsButton);          
         }
+
+        if (BackButton != null)
+        {
+            AddButtonHoverEffect(BackButton);           
+        }
+
+        
     }
 
     private void AddButtonHoverEffect(Button button)
     {
         var eventTrigger = button.gameObject.GetComponent<EventTrigger>();
+
         if (eventTrigger == null)
         {
             eventTrigger = button.gameObject.AddComponent<EventTrigger>();
@@ -66,18 +81,21 @@ public class MainMenuController : MonoBehaviour
     }
 
     private void OnButtonHover(Button button, bool isHovering)
-    {
-        Debug.Log($"Button hover: {button.name}, isHovering: {isHovering}");
-        float targetScale = isHovering ? buttonHoverScale : 1f;
-        
+    {      
+        if(isHovering)
+        {
+            PlayClickSound();
+        }
+        float targetScale = isHovering ? buttonHoverScale : 1f; 
+
         if (currentHoverCoroutine != null)
-            StopCoroutine(currentHoverCoroutine);
-            
-        currentHoverCoroutine = StartCoroutine(ScaleButton(button.transform, targetScale, animationSpeed));
+            StopCoroutine(currentHoverCoroutine);          
+        currentHoverCoroutine = StartCoroutine(ScaleButton(button.transform, targetScale, animationSpeed));       
+
     }
     
     private System.Collections.IEnumerator ScaleButton(Transform target, float targetScale, float duration)
-    {
+    {       
         Vector3 startScale = target.localScale;
         Vector3 endScale = Vector3.one * targetScale;
         float elapsed = 0f;
@@ -91,42 +109,6 @@ public class MainMenuController : MonoBehaviour
         }
         
         target.localScale = endScale;
-    }
-
-    private void OnStartGameClicked()
-    {
-        Debug.Log("Start Game clicked!");
-        AnimateButtonClick(startGameButton, () =>
-        {
-            if (UIManager.Instance != null)
-            {
-                UIManager.Instance.StartGame();
-            }
-        });
-    }
-
-    private void OnQuitClicked()
-    {
-        Debug.Log("Quit clicked!");
-        AnimateButtonClick(quitButton, () =>
-        {
-            if (UIManager.Instance != null)
-            {
-                UIManager.Instance.QuitGame();
-            }
-        });
-    }
-
-    private void OnSettingsClicked()
-    {
-        Debug.Log("Settings clicked!");
-        AnimateButtonClick(settingsButton, () =>
-        {
-            if (UIManager.Instance != null)
-            {
-                UIManager.Instance.ShowSettings();
-            }
-        });
     }
 
     private void AnimateButtonClick(Button button, System.Action onComplete)
@@ -164,15 +146,5 @@ public class MainMenuController : MonoBehaviour
         onComplete?.Invoke();
     }
 
-    private void OnDestroy()
-    {
-        if (startGameButton != null)
-            startGameButton.onClick.RemoveListener(OnStartGameClicked);
-        
-        if (quitButton != null)
-            quitButton.onClick.RemoveListener(OnQuitClicked);
-        
-        if (settingsButton != null)
-            settingsButton.onClick.RemoveListener(OnSettingsClicked);
-    }
+ 
 }
