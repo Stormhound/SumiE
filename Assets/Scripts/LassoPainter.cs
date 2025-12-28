@@ -66,19 +66,26 @@ public class LassoPainter : MonoBehaviour
         texWidth = Mathf.RoundToInt(Screen.width * resolutionScale);
         texHeight = Mathf.RoundToInt(Screen.height * resolutionScale);
 
+        // Create the master texture
         drawTexture = new Texture2D(texWidth, texHeight, TextureFormat.RGBA32, false);
         drawTexture.filterMode = FilterMode.Bilinear;
 
+        // 1. Clear it first
         var pixels = drawTexture.GetRawTextureData<Color32>();
         new ClearTextureJob { pixelData = pixels }.Run(pixels.Length);
         drawTexture.Apply();
 
+        // 2. Assign to UI
         if (outputDisplay != null) outputDisplay.texture = drawTexture;
 
+        // 3. Ask ScatterPoints to draw initial blobs
         if (scatterScript != null)
         {
             scatterScript.GenerateAndRenderToTexture(drawTexture, texWidth, texHeight);
         }
+
+        // 4. Calculate initial progress (blobs count as filled area)
+        CalculateAndReportProgress();
     }
 
     void Update()
@@ -134,9 +141,10 @@ public class LassoPainter : MonoBehaviour
 
     void EndStroke()
     {
-        if (!isDrawing) { return; }
+        if (!isDrawing) return;
 
         isDrawing = false;
+
         if (worldPoints.Count < 5)
         {
             lr.positionCount = 0;
@@ -267,12 +275,14 @@ public class LassoPainter : MonoBehaviour
             yield return null;
         }
 
-        // *** RECALCULATE COLLIDERS HERE (After animation is done) ***
+        // Recalculate Colliders
         if (scatterScript != null)
         {
-            // We pass the lasso points to the Scatter script to append the new shape
             scatterScript.AddLassoCollider(worldPoints);
         }
+
+        // Calculate and Report Progress to Game Manager
+        CalculateAndReportProgress();
 
         // Cleanup
         pointBuffer.Dispose();
@@ -294,10 +304,33 @@ public class LassoPainter : MonoBehaviour
         return cam.ScreenToWorldPoint(mouseScreen);
     }
 
+    // --- PROGRESS CALCULATION HELPER ---
+    void CalculateAndReportProgress()
+    {
+        if (GameManager.Instance == null) return;
+
+        NativeArray<Color32> currentPixels = drawTexture.GetRawTextureData<Color32>();
+        NativeReference<int> filledCount = new NativeReference<int>(Allocator.TempJob);
+
+        var countJob = new CountPixelsJob
+        {
+            pixelData = currentPixels,
+            coloredCount = filledCount
+        };
+
+        countJob.Schedule().Complete();
+
+        GameManager.Instance.UpdateGameState(currentPixels.Length, filledCount.Value);
+        filledCount.Dispose();
+    }
+
     void OnDestroy() { if (backupTextureState.IsCreated) backupTextureState.Dispose(); }
 }
 
-// --- JOBS ---
+// -----------------------------------------------------------------------------
+// BURST JOBS
+// -----------------------------------------------------------------------------
+
 [BurstCompile] struct ClearTextureJob : IJobParallelFor { public NativeArray<Color32> pixelData; public void Execute(int index) => pixelData[index] = new Color32(0, 0, 0, 0); }
 [BurstCompile] struct MaskFromTextureJob : IJobParallelFor { [ReadOnly] public NativeArray<Color32> texturePixels; public NativeArray<float> outputGrid; public int width, height, offsetX, offsetY; public void Execute(int index) { int y = index / width; int x = index % width; int globalIndex = (y + offsetY) * width + (x + offsetX); if (globalIndex >= 0 && globalIndex < texturePixels.Length) outputGrid[index] = (texturePixels[globalIndex].a > 0) ? -1f : 0f; else outputGrid[index] = 0f; } }
 [BurstCompile] struct ScanlineJob : IJob { [ReadOnly] public NativeArray<int2> points; public NativeArray<float> outputGrid; public int width, height, offsetX, offsetY; public void Execute() { for (int y = 0; y < height; y++) { int globalY = y + offsetY; NativeList<int> nodes = new NativeList<int>(32, Allocator.Temp); int j = points.Length - 1; for (int i = 0; i < points.Length; i++) { int2 pi = points[i]; int2 pj = points[j]; if ((pi.y < globalY && pj.y >= globalY) || (pj.y < globalY && pi.y >= globalY)) { float intersect = pi.x + (float)(globalY - pi.y) / (pj.y - pi.y) * (pj.x - pi.x); nodes.Add((int)intersect); } j = i; } nodes.Sort(); for (int k = 0; k < nodes.Length; k += 2) { if (k + 1 >= nodes.Length) break; int startX = Mathf.Clamp(nodes[k] - offsetX, 0, width - 1); int endX = Mathf.Clamp(nodes[k + 1] - offsetX, 0, width - 1); for (int x = startX; x < endX; x++) outputGrid[y * width + x] = -1f; } nodes.Dispose(); } } }
@@ -309,3 +342,21 @@ public class LassoPainter : MonoBehaviour
 struct PixelSortData : System.IComparable<PixelSortData> { public int globalIndex; public Color32 color; public float sortKey; public int CompareTo(PixelSortData other) => other.sortKey.CompareTo(sortKey); }
 [BurstCompile] struct CollectSortDataJob : IJob { [ReadOnly] public NativeArray<Color32> colors; public NativeList<PixelSortData> sortList; public int globalOffsetX, globalOffsetY, totalCanvasWidth, jobWidth; public void Execute() { for (int i = 0; i < colors.Length; i++) { if (colors[i].a > 0) { int localY = i / jobWidth; int localX = i % jobWidth; int globalIndex = (localY + globalOffsetY) * totalCanvasWidth + (localX + globalOffsetX); sortList.Add(new PixelSortData { globalIndex = globalIndex, color = colors[i], sortKey = colors[i].a }); } } } }
 [BurstCompile] struct SortPixelJob : IJob { public NativeList<PixelSortData> list; public void Execute() => list.Sort(); }
+
+// --- NEW JOB: COUNT PIXELS ---
+[BurstCompile]
+struct CountPixelsJob : IJob
+{
+    [ReadOnly] public NativeArray<Color32> pixelData;
+    public NativeReference<int> coloredCount;
+
+    public void Execute()
+    {
+        int count = 0;
+        for (int i = 0; i < pixelData.Length; i++)
+        {
+            if (pixelData[i].a > 0) count++;
+        }
+        coloredCount.Value = count;
+    }
+}
