@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using Unity.Jobs;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Burst;
 using Unity.Mathematics;
 
@@ -21,6 +22,7 @@ public class LassoPainter : MonoBehaviour
     [Range(0, 10)] public int blurPasses = 3;
     public int blurRadius = 2;
     [Range(0.1f, 1f)] public float resolutionScale = 0.5f;
+    public Color32 enemyColor = new Color32(255, 0, 0, 255);
 
     [Tooltip("Distance in pixels from the edge where the ink becomes fully opaque.")]
     public float gradientWidth = 24.0f;
@@ -39,6 +41,7 @@ public class LassoPainter : MonoBehaviour
 
     [Header("Animation")]
     [Range(0.1f, 2.0f)] public float fillDuration = 0.5f;
+    [Range(0.1f, 5.0f)] public float enemyExpansionDuration = 1.0f;
 
     // Internal State
     private LineRenderer lr;
@@ -55,6 +58,15 @@ public class LassoPainter : MonoBehaviour
     private int texWidth, texHeight;
     private NativeArray<Color32> backupTextureState;
     private NativeList<PixelSortData> activeSortKeys; // Only persist this for animation
+    
+    // Enemy State
+    public struct EnemySeed
+    {
+        public int2 pos;
+        public float radius;
+        public int active; // 1 = true, 0 = false
+    }
+    private NativeList<EnemySeed> enemySeeds;
 
     void OnDisable()
     {
@@ -82,8 +94,13 @@ public class LassoPainter : MonoBehaviour
 
     void InitializeTexture()
     {
-        texWidth = Mathf.RoundToInt(Screen.width * resolutionScale);
-        texHeight = Mathf.RoundToInt(Screen.height * resolutionScale);
+        Rect r = outputDisplay.rectTransform.rect;
+        // Ensure accurate size from Rect, fallback to screen if rect is zero (e.g. layout not ready)
+        float baseW = r.width > 0 ? r.width : Screen.width;
+        float baseH = r.height > 0 ? r.height : Screen.height;
+
+        texWidth = Mathf.RoundToInt(baseW * resolutionScale);
+        texHeight = Mathf.RoundToInt(baseH * resolutionScale);
 
         // Create the master texture
         drawTexture = new Texture2D(texWidth, texHeight, TextureFormat.RGBA32, false);
@@ -105,7 +122,67 @@ public class LassoPainter : MonoBehaviour
 
         // 4. Calculate initial progress (blobs count as filled area)
         CalculateAndReportProgress();
+        
+        // 5. Initialize Enemies (managed by GameManager usually, but we can do it here if count is passed, 
+        // effectively we expect InitializeEnemies to be called explicitly or we default it)
     }
+
+    public void InitializeEnemies(int count, int startRadius)
+    {
+        if (enemySeeds.IsCreated) enemySeeds.Dispose();
+        enemySeeds = new NativeList<EnemySeed>(count, Allocator.Persistent);
+
+        if (drawTexture == null) return;
+        
+        Debug.Log($"[LassoPainter] Spawning {count} Enemy Seeds...");
+
+        // Smart Spawn: Don't spawn on top of existing ink (which scatter points made)
+        // Actually, ScatterPoints might not have run yet if Start order is racey.
+        // Simple random for now.
+        
+        // Use a job or main thread rng? Main thread is fine for init.
+        NativeArray<Color32> pixels = drawTexture.GetRawTextureData<Color32>();
+        
+        int spawned = 0;
+        int attempts = 0;
+        while (spawned < count && attempts < count * 10)
+        {
+            attempts++;
+            int x = UnityEngine.Random.Range(eraseMargin, texWidth - eraseMargin);
+            int y = UnityEngine.Random.Range(eraseMargin, texHeight - eraseMargin);
+            
+            // Check if occupied? (Optional, but good game feel)
+            // Color32 c = pixels[y * texWidth + x];
+            // if (c.a > 0) continue; 
+            
+            enemySeeds.Add(new EnemySeed { pos = new int2(x, y), radius = startRadius, active = 1 });
+            
+            // Burn the initial hole
+            GameManager.Instance.UpdateEnemyCount(spawned + 1); // Temporary update
+            spawned++;
+        }
+        
+        // Perform initial erase
+        var job = new ExpandActiveSeedsJob
+        {
+            pixelData = pixels,
+            seeds = enemySeeds,
+            width = texWidth,
+            height = texHeight,
+            fillColor = enemyColor
+        };
+        job.Schedule(pixels.Length, 64).Complete();
+        drawTexture.Apply();
+
+        // Report
+        GameManager.Instance.UpdateEnemyCount(enemySeeds.Length);
+        
+        // Update Physics
+        ScatterPoints sp = FindFirstObjectByType<ScatterPoints>();
+        if (sp) sp.UpdateColliderFromTexture(drawTexture, enemyColor);
+    } 
+    
+    private const int eraseMargin = 20;
 
     void Update()
     {
@@ -246,18 +323,50 @@ public class LassoPainter : MonoBehaviour
         int minX = 0; int maxX = texWidth - 1;
         int minY = 0; int maxY = texHeight - 1;
 
+        // Resolve UI Camera for coordinate conversion
+        Canvas uiCanvas = outputDisplay.canvas;
+        Camera uiCam = null;
+        if (uiCanvas.renderMode == RenderMode.ScreenSpaceCamera || uiCanvas.renderMode == RenderMode.WorldSpace)
+            uiCam = uiCanvas.worldCamera;
+
+        Rect rectBounds = outputDisplay.rectTransform.rect;
+        float rX = rectBounds.x;
+        float rY = rectBounds.y;
+        float rW = rectBounds.width;
+        float rH = rectBounds.height;
+
         for (int i = 0; i < worldPoints.Count; i++)
         {
-            Vector3 sPos = cam.WorldToScreenPoint(worldPoints[i]);
-            int x = Mathf.Clamp(Mathf.RoundToInt(sPos.x * resolutionScale), 0, texWidth - 1);
-            int y = Mathf.Clamp(Mathf.RoundToInt(sPos.y * resolutionScale), 0, texHeight - 1);
+            // 1. World -> Screen
+            Vector2 screenPos = cam.WorldToScreenPoint(worldPoints[i]);
+            
+            // 2. Screen -> Local UI Space
+            Vector2 localPos;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(outputDisplay.rectTransform, screenPos, uiCam, out localPos);
+
+            // 3. Local -> UV (0..1)
+            // LocalPos is relative to Pivot. rectBounds.x/y is the bottom-left offset from Pivot.
+            float u = (localPos.x - rX) / rW;
+            float v = (localPos.y - rY) / rH;
+
+            // 4. UV -> Texture Pixel
+            int x = Mathf.Clamp(Mathf.RoundToInt(u * texWidth), 0, texWidth - 1);
+            int y = Mathf.Clamp(Mathf.RoundToInt(v * texHeight), 0, texHeight - 1);
+
             pointBuffer[i] = new int2(x, y);
+
+            // Debug Bounds
+            if (i==0) { minX=x; maxX=x; minY=y; maxY=y; }
+            else { minX=Mathf.Min(minX,x); maxX=Mathf.Max(maxX,x); minY=Mathf.Min(minY,y); maxY=Mathf.Max(maxY,y); }
         }
+
+        Debug.Log($"[LassoPainter] Texture: {texWidth}x{texHeight}. Drawn Bounds: X[{minX}-{maxX}], Y[{minY}-{maxY}]. Scale: {resolutionScale}");
 
         int jobW = texWidth;
         int jobH = texHeight;
 
-        Debug.Log("[LassoPainter] Starting Job Scheduling...");
+        Debug.Log($"[LassoPainter] Scheduling Jobs. Texture: {texWidth}x{texHeight}, Points: {worldPoints.Count}. Scale: {resolutionScale}");
+
 
         // Temp Buffers - Dispose immediately after calculation!
 
@@ -279,28 +388,33 @@ public class LassoPainter : MonoBehaviour
                 outputGrid = distGrid, 
                 width = jobW, 
                 height = jobH, 
-                offsetX = minX, 
-                offsetY = minY,
-                gradientWidth = gradientWidth,
-                smoothness = smoothness
+                offsetX = 0, 
+                offsetY = 0,
+                enemyColor = enemyColor
             };
             JobHandle handle = maskJob.Schedule(jobW * jobH, 64);
-
-            var scanlineJob = new ScanlineJob { points = pointBuffer, outputGrid = distGrid, width = jobW, height = jobH, offsetX = minX, offsetY = minY };
-            handle = scanlineJob.Schedule(handle);
-
-            // Draw caps at start/end to seal gaps
-            var capJob = new DrawCapsJob { 
-                p0 = pointBuffer[0], 
-                p1 = pointBuffer[pointBuffer.Length - 1], 
+            
+            // NEW: Rasterize the stroke edges explicitly to ensure the shape outline is 100% accurate
+            // This prevents "thin" areas from being skipped by the scanline logic.
+            // We use 'gradientWidth' as the radius to ensure the User's Path is the SOLID CORE (d=24), preventing shrinkage.
+            var strokeJob = new StrokeRasterJob 
+            { 
+                points = pointBuffer, 
                 outputGrid = distGrid, 
                 width = jobW, 
                 height = jobH, 
-                offsetX = minX, 
-                offsetY = minY, 
-                radius = gradientWidth 
+                offsetX = 0, 
+                offsetY = 0,
+                radius = gradientWidth
             };
-            handle = capJob.Schedule(jobW * jobH, 64, handle);
+            handle = strokeJob.Schedule(pointBuffer.Length, 64, handle);
+
+            var scanlineJob = new ScanlineJob { points = pointBuffer, outputGrid = distGrid, width = jobW, height = jobH, offsetX = 0, offsetY = 0 };
+            handle = scanlineJob.Schedule(handle);
+
+            // Removed CapJob - The ScanlineJob handles the closed polygon. 
+            // This ensures precise "straight line" closure without blobs.
+
 
             handle = new ChamferJobPass1 { grid = distGrid, width = jobW, height = jobH }.Schedule(handle);
             handle = new ChamferJobPass2 { grid = distGrid, width = jobW, height = jobH }.Schedule(handle);
@@ -310,7 +424,7 @@ public class LassoPainter : MonoBehaviour
             // Removed Blur Loop. GradientJob provides sufficient softness.
             // Extra blur causes the "Recovered Distance" to miscalculate and expand the shape.
 
-            handle = new CollectSortDataJob { colors = finalFillColors, distGrid = distGrid, sortList = activeSortKeys, globalOffsetX = minX, globalOffsetY = minY, totalCanvasWidth = texWidth, jobWidth = jobW }.Schedule(handle);
+            handle = new CollectSortDataJob { colors = finalFillColors, distGrid = distGrid, sortList = activeSortKeys, globalOffsetX = 0, globalOffsetY = 0, totalCanvasWidth = texWidth, jobWidth = jobW }.Schedule(handle);
             handle = new SortPixelJob { list = activeSortKeys }.Schedule(handle);
             
             handle.Complete();
@@ -332,9 +446,7 @@ public class LassoPainter : MonoBehaviour
         pointBuffer.Dispose();
         distGrid.Dispose();
         finalFillColors.Dispose();
-        // blurBuffer.Dispose();
 
-        // Animate
         // Animate
         int totalPixels = activeSortKeys.Length;
         float startTime = Time.time;
@@ -374,7 +486,7 @@ public class LassoPainter : MonoBehaviour
         
         // 5. Update Physics from Texture
         ScatterPoints sp = FindFirstObjectByType<ScatterPoints>();
-        if (sp) sp.UpdateColliderFromTexture(drawTexture);
+        if (sp) sp.UpdateColliderFromTexture(drawTexture, enemyColor);
     }
 
     public void RefillInk()
@@ -404,7 +516,8 @@ public class LassoPainter : MonoBehaviour
         var countJob = new CountPixelsJob
         {
             pixelData = currentPixels,
-            coloredCount = filledCount
+            coloredCount = filledCount,
+            enemyColor = enemyColor
         };
 
         countJob.Schedule().Complete();
@@ -413,36 +526,159 @@ public class LassoPainter : MonoBehaviour
         filledCount.Dispose();
     }
 
-    public void EraseRandomAreas(int count, int radius)
+    public IEnumerator ExpandEnemiesRoutine(float expansionAmount)
     {
-        if (drawTexture == null) return;
-        
+        if (drawTexture == null || !enemySeeds.IsCreated || enemySeeds.Length == 0) yield break;
+
         NativeArray<Color32> pixels = drawTexture.GetRawTextureData<Color32>();
+
+        // 1. CHECK CAPTURES
+        // If center of seed has Alpha > 0, it is captured.
+        // We run a job to update the 'active' state of seeds.
         
-        // Simple CPU random pick, GPU erase
-        for(int i=0; i<count; i++)
+        var captureJob = new CheckCapturesJob
         {
-            int randX = UnityEngine.Random.Range(0, texWidth);
-            int randY = UnityEngine.Random.Range(0, texHeight);
+            pixelData = pixels,
+            seeds = enemySeeds.AsArray(),
+            width = texWidth,
+            enemyColor = enemyColor
+        };
+        captureJob.Schedule(enemySeeds.Length, 32).Complete();
+        
+        // Update Count UI
+        int activeCount = 0;
+        for (int i=0; i<enemySeeds.Length; i++) if (enemySeeds[i].active == 1) activeCount++;
+        GameManager.Instance.UpdateEnemyCount(activeCount);
+        
+        if (activeCount == 0)
+        {
+            Debug.Log("[LassoPainter] All enemies captured! Filling canvas...");
+            yield return StartCoroutine(FillAllRoutine());
+            yield break;
+        }
+
+        // 2. ANIMATE EXPANSION
+        float startTime = Time.time;
+        
+        // Copy current states to temp to interpolate from
+        NativeArray<float> startRadii = new NativeArray<float>(enemySeeds.Length, Allocator.Persistent);
+        
+        try
+        {
+            for(int i=0; i<enemySeeds.Length; i++) startRadii[i] = enemySeeds[i].radius;
+
+            while (Time.time < startTime + enemyExpansionDuration)
+            {
+                float t = (Time.time - startTime) / enemyExpansionDuration;
+                float smoothT = 1f - (1f - t) * (1f - t); // EaseOut
+
+                // Update persistent radii for the *current frame* calculation
+                for (int i=0; i<enemySeeds.Length; i++)
+                {
+                    if (enemySeeds[i].active == 1)
+                    {
+                        EnemySeed s = enemySeeds[i];
+                        s.radius = startRadii[i] + (expansionAmount * smoothT);
+                        enemySeeds[i] = s;
+                    }
+                }
+
+                var job = new ExpandActiveSeedsJob
+                {
+                    pixelData = pixels,
+                    seeds = enemySeeds, // Uses current interpolated radii
+                    width = texWidth,
+                    height = texHeight,
+                    fillColor = enemyColor
+                };
+                
+                job.Schedule(pixels.Length, 64).Complete();
+                drawTexture.Apply();
+                yield return null;
+            }
             
-            // Check if we hit anything (optimization)? Pass, just erase.
-            var job = new EraseCircleJob
+            // Ensure final value set
+            for (int i=0; i<enemySeeds.Length; i++)
+            {
+                if (enemySeeds[i].active == 1)
+                {
+                    EnemySeed s = enemySeeds[i];
+                    s.radius = startRadii[i] + expansionAmount;
+                    enemySeeds[i] = s;
+                }
+            }
+            
+            // Final Erase Pass
+            new ExpandActiveSeedsJob
             {
                 pixelData = pixels,
+                seeds = enemySeeds,
                 width = texWidth,
                 height = texHeight,
-                centerX = randX,
-                centerY = randY,
-                radius = radius
-            };
-            job.Schedule(pixels.Length, 64).Complete();
+                fillColor = enemyColor
+            }.Schedule(pixels.Length, 64).Complete();
+
+            drawTexture.Apply();
         }
-        
-        drawTexture.Apply();
-        
-        // Update Physics
+        finally
+        {
+            if (startRadii.IsCreated) startRadii.Dispose();
+        }
+
+        // 3. Update Physics & Game State
         ScatterPoints sp = FindFirstObjectByType<ScatterPoints>();
-        if (sp) sp.UpdateColliderFromTexture(drawTexture);
+        if (sp) sp.UpdateColliderFromTexture(drawTexture, enemyColor);
+
+        CalculateAndReportProgress();
+    }
+
+    public IEnumerator FillAllRoutine()
+    {
+        if (drawTexture == null) yield break;
+
+        NativeArray<Color32> pixels = drawTexture.GetRawTextureData<Color32>();
+        
+        // 1. Prepare Sort Keys
+        if (!activeSortKeys.IsCreated) activeSortKeys = new NativeList<PixelSortData>(texWidth * texHeight, Allocator.Persistent);
+        activeSortKeys.Clear();
+
+        // 2. Collect Empty Pixels
+        var collectJob = new CollectEmptyPixelsJob
+        {
+            pixelData = pixels,
+            sortList = activeSortKeys,
+            targetColor = centerColor,
+            seed = (uint)UnityEngine.Random.Range(1, 100000),
+            enemyColor = enemyColor
+        };
+        collectJob.Schedule().Complete();
+        
+        // 3. Sort (Randomize order)
+        new SortPixelJob { list = activeSortKeys }.Schedule().Complete();
+
+        // 4. Animate Fill
+        int totalToFill = activeSortKeys.Length;
+        float startTime = Time.time;
+        int processedCount = 0;
+        
+        while (processedCount < totalToFill)
+        {
+            float t = (Time.time - startTime) / fillDuration; // Reuse standard fill speed
+            int targetCount = Mathf.Clamp(Mathf.FloorToInt(t * totalToFill), 0, totalToFill);
+
+            while (processedCount < targetCount)
+            {
+                PixelSortData data = activeSortKeys[processedCount];
+                pixels[data.globalIndex] = data.color;
+                processedCount++;
+            }
+            drawTexture.Apply();
+            yield return null;
+        }
+
+        // Update Physics (Full box)
+        ScatterPoints sp = FindFirstObjectByType<ScatterPoints>();
+        if (sp) sp.UpdateColliderFromTexture(drawTexture, enemyColor);
         
         CalculateAndReportProgress();
     }
@@ -452,35 +688,113 @@ public class LassoPainter : MonoBehaviour
 // BURST JOBS
 // -----------------------------------------------------------------------------
 
-[BurstCompile] struct ClearTextureJob : IJobParallelFor { public NativeArray<Color32> pixelData; public void Execute(int index) => pixelData[index] = new Color32(0, 0, 0, 0); }
 
-[BurstCompile] 
-struct EraseCircleJob : IJobParallelFor 
-{ 
-    public NativeArray<Color32> pixelData; 
-    public int width, height, centerX, centerY, radius;
 
-    public void Execute(int index) 
+// [BurstCompile] struct FillTextureJob ... (removed)
+
+
+[BurstCompile]
+struct CollectEmptyPixelsJob : IJob
+{
+    [ReadOnly] public NativeArray<Color32> pixelData;
+    public NativeList<PixelSortData> sortList;
+    public Color32 targetColor;
+    public uint seed;
+    public Color32 enemyColor;
+
+    public void Execute()
+    {
+        Unity.Mathematics.Random rng = new Unity.Mathematics.Random(seed);
+        for (int i = 0; i < pixelData.Length; i++)
+        {
+            // Fill anything that isn't already fully opaque to ensure seamless blend
+            // AND Treat Enemy (Red) as Empty/Overwriteable
+            Color32 c = pixelData[i];
+            bool isEnemy = (c.r == enemyColor.r && c.g == enemyColor.g && c.b == enemyColor.b);
+            
+            if (c.a < 255 || isEnemy)
+            {
+                sortList.Add(new PixelSortData 
+                { 
+                    globalIndex = i, 
+                    color = targetColor, 
+                    sortKey = rng.NextFloat() 
+                });
+            }
+        }
+    }
+}
+
+[BurstCompile]
+struct CheckCapturesJob : IJobParallelFor
+{
+    [ReadOnly] public NativeArray<Color32> pixelData;
+    public NativeArray<LassoPainter.EnemySeed> seeds;
+    public int width;
+    public Color32 enemyColor;
+
+    public void Execute(int index)
+    {
+        // Check if the CENTER of the seed is covered by ink
+        LassoPainter.EnemySeed s = seeds[index];
+        if (s.active == 0) return;
+
+        int idx = s.pos.y * width + s.pos.x;
+        if (idx >= 0 && idx < pixelData.Length)
+        {
+            Color32 c = pixelData[idx];
+            bool isEnemy = (c.r == enemyColor.r && c.g == enemyColor.g && c.b == enemyColor.b);
+
+            // Captured if ink present AND not enemy ink
+            if (c.a > 0 && !isEnemy)
+            {
+                // Captured!
+                s.active = 0;
+                seeds[index] = s;
+            }
+        }
+    }
+}
+
+[BurstCompile]
+struct ExpandActiveSeedsJob : IJobParallelFor
+{
+    public NativeArray<Color32> pixelData;
+    [ReadOnly] public NativeList<LassoPainter.EnemySeed> seeds;
+    public int width, height;
+    public Color32 fillColor;
+
+    public void Execute(int index)
     {
         int y = index / width; 
         int x = index % width;
         
-        float dx = x - centerX;
-        float dy = y - centerY;
-        
-        if (dx*dx + dy*dy <= radius*radius)
+        for (int i = 0; i < seeds.Length; i++)
         {
-            pixelData[index] = new Color32(0, 0, 0, 0);
+            var s = seeds[i];
+            if (s.active == 0) continue; // Skip captured enemies
+
+            float dx = x - s.pos.x;
+            float dy = y - s.pos.y;
+            
+            if (dx * dx + dy * dy <= s.radius * s.radius)
+            {
+                pixelData[index] = fillColor;
+                return; 
+            }
         }
-    } 
+    }
 }
+
+[BurstCompile] struct ClearTextureJob : IJobParallelFor { public NativeArray<Color32> pixelData; public void Execute(int index) => pixelData[index] = new Color32(0, 0, 0, 0); }
+
 [BurstCompile] 
 struct MaskFromTextureJob : IJobParallelFor 
 { 
     [ReadOnly] public NativeArray<Color32> texturePixels; 
     public NativeArray<float> outputGrid; 
-    public int width, height, offsetX, offsetY; 
-    public float gradientWidth, smoothness;
+    public int width, height, offsetX, offsetY;
+    public Color32 enemyColor;
 
     public void Execute(int index) 
     { 
@@ -490,29 +804,27 @@ struct MaskFromTextureJob : IJobParallelFor
         
         if (globalIndex >= 0 && globalIndex < texturePixels.Length) 
         {
-            float alpha = texturePixels[globalIndex].a / 255.0f;
-            if (alpha <= 0.001f)
+            Color32 c = texturePixels[globalIndex];
+            bool isEnemy = (c.r == enemyColor.r && c.g == enemyColor.g && c.b == enemyColor.b);
+
+            // Binary classification: 0 = Outside (Source), 99999 = Inside (Target for Distance)
+            // If it's enemy (Red), it's effectively Outside/Empty for our strokes
+            if (c.a > 0 && !isEnemy)
             {
-                // Background acts as the "Zero Distance" seed (Outside)
-                outputGrid[index] = 0f;
+                outputGrid[index] = 99999f;
             }
             else
             {
-                // Recover distance from Alpha
-                // alpha = pow(d/W, S) -> d = W * pow(alpha, 1/S)
-                // Small Alpha = Small Distance (Edge/Background)
-                // Large Alpha = Large Distance (Core)
-                float d = gradientWidth * math.pow(alpha, 1.0f / smoothness);
-                outputGrid[index] = d;
+                outputGrid[index] = 0f;
             }
         }
         else 
         {
-            outputGrid[index] = 0f; // Global background is 0
+            outputGrid[index] = 0f;
         }
     } 
 }
-[BurstCompile] struct ScanlineJob : IJob { [ReadOnly] public NativeArray<int2> points; public NativeArray<float> outputGrid; public int width, height, offsetX, offsetY; public void Execute() { for (int y = 0; y < height; y++) { int globalY = y + offsetY; NativeList<int> nodes = new NativeList<int>(32, Allocator.Temp); int j = points.Length - 1; for (int i = 0; i < points.Length; i++) { int2 pi = points[i]; int2 pj = points[j]; if ((pi.y < globalY && pj.y >= globalY) || (pj.y < globalY && pi.y >= globalY)) { float intersect = pi.x + (float)(globalY - pi.y) / (pj.y - pi.y) * (pj.x - pi.x); nodes.Add((int)intersect); } j = i; } nodes.Sort(); for (int k = 0; k < nodes.Length; k += 2) { if (k + 1 >= nodes.Length) break; int startX = Mathf.Clamp(nodes[k] - offsetX, 0, width - 1); int endX = Mathf.Clamp(nodes[k + 1] - offsetX, 0, width - 1); for (int x = startX; x < endX; x++) outputGrid[y * width + x] = -1f; } nodes.Dispose(); } } }
+[BurstCompile] struct ScanlineJob : IJob { [ReadOnly] public NativeArray<int2> points; public NativeArray<float> outputGrid; public int width, height, offsetX, offsetY; public void Execute() { for (int y = 0; y < height; y++) { int globalY = y + offsetY; NativeList<int> nodes = new NativeList<int>(32, Allocator.Temp); int j = points.Length - 1; for (int i = 0; i < points.Length; i++) { int2 pi = points[i]; int2 pj = points[j]; if ((pi.y < globalY && pj.y >= globalY) || (pj.y < globalY && pi.y >= globalY)) { float intersect = pi.x + (float)(globalY - pi.y) / (pj.y - pi.y) * (pj.x - pi.x); nodes.Add(Mathf.RoundToInt(intersect)); } j = i; } nodes.Sort(); for (int k = 0; k < nodes.Length; k += 2) { if (k + 1 >= nodes.Length) break; int startX = Mathf.Clamp(nodes[k] - offsetX, 0, width - 1); int endX = Mathf.Clamp(nodes[k + 1] - offsetX, 0, width - 1); for (int x = startX; x < endX; x++) outputGrid[y * width + x] = -1f; } nodes.Dispose(); } } }
 [BurstCompile] struct ChamferJobPass1 : IJob { public NativeArray<float> grid; public int width, height; public void Execute() { for (int i = 0; i < grid.Length; i++) if (grid[i] < 0) grid[i] = 99999f; for (int y = 0; y < height; y++) { for (int x = 0; x < width; x++) { int idx = y * width + x; if (grid[idx] > 0) { float minVal = 99999f; if (x > 0) minVal = math.min(minVal, grid[y * width + (x - 1)] + 1.0f); if (y > 0) minVal = math.min(minVal, grid[(y - 1) * width + x] + 1.0f); if (x > 0 && y > 0) minVal = math.min(minVal, grid[(y - 1) * width + (x - 1)] + 1.414f); if (x < width - 1 && y > 0) minVal = math.min(minVal, grid[(y - 1) * width + (x + 1)] + 1.414f); if (minVal < grid[idx]) grid[idx] = minVal; } } } } }
 [BurstCompile] struct ChamferJobPass2 : IJob { public NativeArray<float> grid; public int width, height; public void Execute() { for (int y = height - 1; y >= 0; y--) { for (int x = width - 1; x >= 0; x--) { int idx = y * width + x; if (grid[idx] > 0) { float minVal = grid[idx]; if (x < width - 1) minVal = math.min(minVal, grid[y * width + (x + 1)] + 1.0f); if (y < height - 1) minVal = math.min(minVal, grid[(y + 1) * width + x] + 1.0f); if (x < width - 1 && y < height - 1) minVal = math.min(minVal, grid[(y + 1) * width + (x + 1)] + 1.414f); if (x > 0 && y < height - 1) minVal = math.min(minVal, grid[(y + 1) * width + (x - 1)] + 1.414f); grid[idx] = minVal; } } } } }
 [BurstCompile] struct GradientJob : IJobParallelFor { [ReadOnly] public NativeArray<float> grid; public NativeArray<Color32> outputColors; public float gradientWidth; public float smoothness; public Color32 centerColor; public void Execute(int index) { float d = grid[index]; if (d <= 0) { outputColors[index] = new Color32(0, 0, 0, 0); return; } float normalized = math.clamp(d / gradientWidth, 0f, 1f); float alpha = math.pow(normalized, smoothness); outputColors[index] = new Color32(centerColor.r, centerColor.g, centerColor.b, (byte)(alpha * 255)); } }
@@ -522,30 +834,7 @@ struct PixelSortData : System.IComparable<PixelSortData> { public int globalInde
 [BurstCompile] struct CollectSortDataJob : IJob { [ReadOnly] public NativeArray<Color32> colors; [ReadOnly] public NativeArray<float> distGrid; public NativeList<PixelSortData> sortList; public int globalOffsetX, globalOffsetY, totalCanvasWidth, jobWidth; public void Execute() { for (int i = 0; i < colors.Length; i++) { if (colors[i].a > 0) { int localY = i / jobWidth; int localX = i % jobWidth; int globalIndex = (localY + globalOffsetY) * totalCanvasWidth + (localX + globalOffsetX); sortList.Add(new PixelSortData { globalIndex = globalIndex, color = colors[i], sortKey = distGrid[i] }); } } } }
 [BurstCompile] struct SortPixelJob : IJob { public NativeList<PixelSortData> list; public void Execute() => list.Sort(); }
 
-[BurstCompile]
-struct DrawCapsJob : IJobParallelFor
-{
-    public int2 p0, p1;
-    public NativeArray<float> outputGrid;
-    public int width, height, offsetX, offsetY;
-    public float radius;
 
-    public void Execute(int index)
-    {
-        int y = index / width;
-        int x = index % width;
-        int globalY = y + offsetY;
-        int globalX = x + offsetX;
-
-        float d0 = math.distance(new float2(globalX, globalY), new float2(p0.x, p0.y));
-        float d1 = math.distance(new float2(globalX, globalY), new float2(p1.x, p1.y));
-
-        if (d0 <= radius || d1 <= radius)
-        {
-            outputGrid[index] = -1f;
-        }
-    }
-}
 
 // --- NEW JOB: COUNT PIXELS ---
 [BurstCompile]
@@ -553,14 +842,70 @@ struct CountPixelsJob : IJob
 {
     [ReadOnly] public NativeArray<Color32> pixelData;
     public NativeReference<int> coloredCount;
+    public Color32 enemyColor;
 
     public void Execute()
     {
         int count = 0;
         for (int i = 0; i < pixelData.Length; i++)
         {
-            if (pixelData[i].a > 0) count++;
+            Color32 c = pixelData[i];
+            bool isEnemy = (c.r == enemyColor.r && c.g == enemyColor.g && c.b == enemyColor.b);
+            
+            // Count only PLAYER ink
+            if (c.a > 0 && !isEnemy) count++;
         }
         coloredCount.Value = count;
+    }
+}
+
+
+
+[BurstCompile]
+struct StrokeRasterJob : IJobParallelFor
+{
+    [ReadOnly] public NativeArray<int2> points;
+    [NativeDisableParallelForRestriction]
+    public NativeArray<float> outputGrid;
+    public int width, height, offsetX, offsetY;
+    public float radius;
+
+    public void Execute(int index)
+    {
+        int2 center = points[index];
+        int globalX = center.x; // Point buffer is already local to texture? No, PointBuffer is Texture Space (0..W)
+        int globalY = center.y;
+        
+        // We need to write to OutputGrid which is 0..W*H.
+        // But our "Draw" logic needs to iterate pixels around the center.
+        
+        int r = (int)math.ceil(radius);
+        int r2 = r * r;
+
+        int startX = math.max(globalX - r, offsetX);
+        int endX = math.min(globalX + r, offsetX + width - 1);
+        int startY = math.max(globalY - r, offsetY);
+        int endY = math.min(globalY + r, offsetY + height - 1);
+
+        // Optimization: The job is ParallelFor over Points.
+        // Multiple points might write to the same pixel. 
+        // We writing -1f (benign race condition, idempotent).
+        
+        for (int y = startY; y <= endY; y++)
+        {
+            for (int x = startX; x <= endX; x++)
+            {
+                int dx = x - globalX;
+                int dy = y - globalY;
+                if (dx * dx + dy * dy <= r2)
+                {
+                    int gridIdx = (y - offsetY) * width + (x - offsetX);
+                    if (gridIdx >= 0 && gridIdx < outputGrid.Length)
+                    {
+                        outputGrid[gridIdx] = -1f;
+                    }
+                }
+            }
+        }
     }
 }

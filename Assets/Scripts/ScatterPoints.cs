@@ -120,7 +120,7 @@ public class ScatterPoints : MonoBehaviour
         }
 
         // 4. Generate Initial Collider
-        UpdateColliderFromTexture(targetTexture);
+        UpdateColliderFromTexture(targetTexture, blobColor);
     }
 
     /// <summary>
@@ -137,24 +137,44 @@ public class ScatterPoints : MonoBehaviour
     /// Update Collider directly from the texture.
     /// This ensures visual and physics are 1:1, handling holes/erasers automatically.
     /// </summary>
-    public void UpdateColliderFromTexture(Texture2D texture)
+    public void UpdateColliderFromTexture(Texture2D texture, Color32 enemyColor)
     {
         if (texture == null) return;
+        
+        // ... (rest of logic same until job) ...
         
         // Create a sprite from the texture to leverage Unity's internal physics shape generator
         Rect rect = new Rect(0, 0, texture.width, texture.height);
         Vector2 pivot = new Vector2(0.5f, 0.5f);
         
-        // NOTE: Sprite.Create might be heavy, but it's robust for 'Holes'.
-        // We set pixelsPerUnit to match the world sizing.
-        // But wait, the texWidth/Height mapped to World Space...
-        // LassoPainter: texWidth = ScreenWidth * ResolutionScale
-        // outputDisplay (RawImage) covers the screen or rect.
+        Texture2D binaryTex = new Texture2D(texture.width, texture.height, TextureFormat.RGBA32, false);
+        NativeArray<Color32> srcPixels = texture.GetRawTextureData<Color32>();
+        NativeArray<Color32> binPixels = binaryTex.GetRawTextureData<Color32>();
         
-        // We need to map the Sprite Physics path back to local space of this object.
-        // Let's create an arbitrary sprite, get paths, and scale them.
+        // Threshold Job
+        new ColliderThresholdJob 
+        { 
+            Input = srcPixels, 
+            Output = binPixels, 
+            Threshold = 1,
+            enemyColor = enemyColor 
+        }.Run(srcPixels.Length);
         
-        Sprite tempSprite = Sprite.Create(texture, rect, pivot, 100.0f, 0, SpriteMeshType.FullRect, Vector4.zero, true);
+        // Dilation Job (New)
+        NativeArray<Color32> dilatedPixels = new NativeArray<Color32>(binPixels.Length, Allocator.TempJob);
+        var dilateJob = new DilateBinaryJob { Input = binPixels, Output = dilatedPixels, width = texture.width, height = texture.height };
+        
+        for(int i=0; i<3; i++)
+        {
+            dilateJob.Run(binPixels.Length);
+            NativeArray<Color32>.Copy(dilatedPixels, binPixels, binPixels.Length);
+        }
+        
+        dilatedPixels.Dispose();
+
+        binaryTex.Apply();
+
+        Sprite tempSprite = Sprite.Create(binaryTex, rect, pivot, 100.0f, 0, SpriteMeshType.FullRect, Vector4.zero, true);
         
         // Verify we got shapes
         int shapeCount = tempSprite.GetPhysicsShapeCount();
@@ -177,37 +197,15 @@ public class ScatterPoints : MonoBehaviour
             pathPoints.Clear();
             tempSprite.GetPhysicsShape(i, pathPoints);
             
-            // Transform Points
-            // Sprite points are in "Units" relative to pivot?
-            // Sprite.Create pivot is (0.5, 0.5).
-            // But pixelsPerUnit is 100.
-            
-            // Let's do raw mapping:
-            // Point (x,y) from GetPhysicsShape corresponds to Local Sprite Space.
-            // Bounds of Sprite are derived from rect/PPU.
-            
-            // Actually, simpler:
-            // Normalize the point to 0..1 based on Texture Size/PPU.
-            // Then map 0..1 to World Size.
-            // Map World to Local.
-            
-            // Sprite bounds:
-            // width = tex.width / 100
-            // height = tex.height / 100
-            // pivot at center.
-            
             float spriteW = texture.width / 100f;
             float spriteH = texture.height / 100f;
             
             for(int j=0; j<pathPoints.Count; j++)
             {
                 Vector2 p = pathPoints[j];
-                // P is relative to center.
-                // UV:
                 float u = (p.x + (spriteW * 0.5f)) / spriteW;
                 float v = (p.y + (spriteH * 0.5f)) / spriteH;
                 
-                // World
                 Vector3 worldPos = bl + new Vector3(size.x * u, size.y * v, 0);
                 pathPoints[j] = transform.InverseTransformPoint(worldPos);
             }
@@ -215,8 +213,8 @@ public class ScatterPoints : MonoBehaviour
             polyCollider.SetPath(i, pathPoints);
         }
         
-        // Cleanup
         Destroy(tempSprite);
+        Destroy(binaryTex);
     }
     
     // Stub for old method - can delete later
@@ -266,5 +264,57 @@ struct SplatterRenderJob : IJobParallelFor
         {
             output[index] = new Color32(color.r, color.g, color.b, newAlpha);
         }
+    }
+}
+
+[BurstCompile]
+struct ColliderThresholdJob : IJobParallelFor
+{
+    [ReadOnly] public NativeArray<Color32> Input;
+    public NativeArray<Color32> Output;
+    public byte Threshold;
+    public Color32 enemyColor;
+
+    public void Execute(int index)
+    {
+        Color32 c = Input[index];
+        bool isEnemy = (c.r == enemyColor.r && c.g == enemyColor.g && c.b == enemyColor.b);
+
+        if (c.a >= Threshold && !isEnemy)
+        {
+            Output[index] = new Color32(255, 0, 0, 255); // Solid
+        }
+        else
+        {
+            Output[index] = new Color32(0, 0, 0, 0); // Empty
+        }
+    }
+}
+
+[BurstCompile]
+struct DilateBinaryJob : IJobParallelFor
+{
+    [ReadOnly] public NativeArray<Color32> Input;
+    public NativeArray<Color32> Output;
+    public int width, height;
+
+    public void Execute(int index)
+    {
+        int y = index / width; 
+        int x = index % width;
+        
+        if (Input[index].a > 0)
+        {
+            Output[index] = new Color32(255, 0, 0, 255);
+            return;
+        }
+
+        bool n = false;
+        if (x > 0 && Input[index - 1].a > 0) n = true;
+        else if (x < width - 1 && Input[index + 1].a > 0) n = true;
+        else if (y > 0 && Input[index - width].a > 0) n = true;
+        else if (y < height - 1 && Input[index + width].a > 0) n = true;
+
+        Output[index] = n ? new Color32(255, 0, 0, 255) : new Color32(0, 0, 0, 0);
     }
 }

@@ -43,10 +43,27 @@ public class GameManager : MonoBehaviour
     public TurnState currentTurn = TurnState.Player;
     
     [Header("Turn Settings")]
-    public int enemyEraseCount = 3;
-    public int enemyEraseRadius = 50;
+    public int enemyCount = 3;
+    public int enemyStartRadius = 30;
+    public float enemyExpansionPerTurn = 10f;
     public UnityEvent OnPlayerTurnStart;
     public UnityEvent OnEnemyTurnStart;
+
+    void Start()
+    {
+        LassoPainter painter = FindFirstObjectByType<LassoPainter>();
+        if (painter != null)
+        {
+            // Defer slightly to ensure texture init
+            StartCoroutine(InitEnemiesRoutine(painter));
+        }
+    }
+    
+    System.Collections.IEnumerator InitEnemiesRoutine(LassoPainter painter)
+    {
+        yield return null; // Wait for Painter Start
+        painter.InitializeEnemies(enemyCount, enemyStartRadius);
+    }
 
     public void EndPlayerTurn()
     {
@@ -62,11 +79,11 @@ public class GameManager : MonoBehaviour
         // Simulate thinking time
         yield return new WaitForSeconds(1.0f);
 
-        // Enemy Action: Erase random parts
+        // Enemy Action: Expand existing points
         LassoPainter painter = FindFirstObjectByType<LassoPainter>();
         if (painter != null)
         {
-            painter.EraseRandomAreas(enemyEraseCount, enemyEraseRadius);
+            yield return StartCoroutine(painter.ExpandEnemiesRoutine(enemyExpansionPerTurn));
         }
 
         // End Enemy Turn
@@ -89,9 +106,13 @@ public class GameManager : MonoBehaviour
         // 2. Check Win Condition
         if (!levelCompleteTriggered && targetPercentage >= winThreshold)
         {
-            levelCompleteTriggered = true;
-            Debug.Log($"Level Complete! Covered: {targetPercentage:F1}%");
             OnLevelComplete?.Invoke();
         }
+    }
+
+    public void UpdateEnemyCount(int count)
+    {
+        GameUI ui = FindFirstObjectByType<GameUI>();
+        if (ui != null) ui.UpdateEnemyCount(count);
     }
 }

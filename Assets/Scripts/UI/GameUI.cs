@@ -12,6 +12,8 @@ public class GameUI : MonoBehaviour
     private Button endTurnButton;
     private GameManager gameManager;
     
+    private Text enemyCountText;
+    
     private float targetInkValue = 100f; // For smooth animation
 
     void Start()
@@ -79,6 +81,22 @@ public class GameUI : MonoBehaviour
         // Logic
         endTurnButton.onClick.AddListener(OnEndTurnClicked);
         
+        // Enemy Counter Text (Top Center)
+        GameObject enemyTextObj = new GameObject("EnemyCounter");
+        enemyTextObj.transform.SetParent(canvasObj.transform, false);
+        enemyCountText = enemyTextObj.AddComponent<Text>();
+        enemyCountText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"); // Changed: Was Arial
+        enemyCountText.alignment = TextAnchor.MiddleCenter;
+        enemyCountText.fontSize = 24;
+        enemyCountText.color = Color.white;
+        
+        RectTransform enemyRect = enemyTextObj.GetComponent<RectTransform>();
+        enemyRect.anchorMin = new Vector2(0.5f, 1);
+        enemyRect.anchorMax = new Vector2(0.5f, 1);
+        enemyRect.pivot = new Vector2(0.5f, 1);
+        enemyRect.anchoredPosition = new Vector2(0, -20);
+        enemyRect.sizeDelta = new Vector2(300, 50);
+
         // Subscribe to Events
         if (gameManager != null)
         {
@@ -154,5 +172,10 @@ public class GameUI : MonoBehaviour
     {
         // No HOTween -> Manual Lerp
         targetInkValue = (current / max) * 100f;
+    }
+
+    public void UpdateEnemyCount(int count)
+    {
+        if (enemyCountText) enemyCountText.text = $"Enemies: {count}";
     }
 }
