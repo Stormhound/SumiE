@@ -38,6 +38,46 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    // --- TURN MANAGEMENT ---
+    public enum TurnState { Player, Enemy }
+    public TurnState currentTurn = TurnState.Player;
+    
+    [Header("Turn Settings")]
+    public int enemyEraseCount = 3;
+    public int enemyEraseRadius = 50;
+    public UnityEvent OnPlayerTurnStart;
+    public UnityEvent OnEnemyTurnStart;
+
+    public void EndPlayerTurn()
+    {
+        if (currentTurn != TurnState.Player || levelCompleteTriggered) return;
+
+        currentTurn = TurnState.Enemy;
+        OnEnemyTurnStart?.Invoke();
+        StartCoroutine(ProcessEnemyTurn());
+    }
+
+    private System.Collections.IEnumerator ProcessEnemyTurn()
+    {
+        // Simulate thinking time
+        yield return new WaitForSeconds(1.0f);
+
+        // Enemy Action: Erase random parts
+        LassoPainter painter = FindFirstObjectByType<LassoPainter>();
+        if (painter != null)
+        {
+            painter.EraseRandomAreas(enemyEraseCount, enemyEraseRadius);
+        }
+
+        // End Enemy Turn
+        yield return new WaitForSeconds(0.5f);
+        currentTurn = TurnState.Player;
+        
+        // Refresh Player
+        if (painter != null) painter.RefillInk();
+        OnPlayerTurnStart?.Invoke();
+    }
+
     public void UpdateGameState(int totalPixels, int filledPixels)
     {
         if (totalPixels == 0) return;
@@ -47,8 +87,6 @@ public class GameManager : MonoBehaviour
         targetPercentage = ratio * 100f;
 
         // 2. Check Win Condition
-        // We check against 'targetPercentage' so the logic triggers immediately,
-        // even if the UI bar is still animating up.
         if (!levelCompleteTriggered && targetPercentage >= winThreshold)
         {
             levelCompleteTriggered = true;

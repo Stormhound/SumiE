@@ -46,18 +46,37 @@ public class LassoPainter : MonoBehaviour
     private Texture2D drawTexture;
     private bool isDrawing = false;
     private bool isCalculating = false;
+    private bool hasDrawnThisTurn = false; // NEW: One draw limit
     private Vector2 currentSmoothPos;
     private Vector2 smoothVelocity;
 
     // Cache
+    // Cache
     private int texWidth, texHeight;
     private NativeArray<Color32> backupTextureState;
+    private NativeList<PixelSortData> activeSortKeys; // Only persist this for animation
+
+    void OnDisable()
+    {
+        if (activeSortKeys.IsCreated) activeSortKeys.Dispose();
+    }
+
+    void OnDestroy() 
+    { 
+        if (activeSortKeys.IsCreated) activeSortKeys.Dispose();
+        if (backupTextureState.IsCreated) backupTextureState.Dispose(); 
+        if (drawTexture != null) Destroy(drawTexture);
+    }
 
     void Start()
     {
         lr = GetComponent<LineRenderer>();
         if (cam == null) cam = Camera.main;
         currentInk = maxInk;
+        
+        // Auto-spawn UI
+        if (FindFirstObjectByType<GameUI>() == null) gameObject.AddComponent<GameUI>();
+
         InitializeTexture();
     }
 
@@ -99,6 +118,13 @@ public class LassoPainter : MonoBehaviour
 
     void StartStroke()
     {
+        // 0. Turn Check
+        // 0. Turn Check
+        if (GameManager.Instance != null && GameManager.Instance.currentTurn != GameManager.TurnState.Player) return;
+        
+        // 0.1 One Draw Limit
+        if (hasDrawnThisTurn) return;
+
         if (currentInk <= 0) return;
 
         Vector2 mousePos = GetMouseWorldPos();
@@ -130,6 +156,10 @@ public class LassoPainter : MonoBehaviour
             {
                 currentInk -= cost;
                 AddPoint(currentSmoothPos);
+                
+                // Update UI
+                GameUI ui = FindFirstObjectByType<GameUI>();
+                if (ui) ui.UpdateInk(currentInk, maxInk);
             }
             else
             {
@@ -184,6 +214,8 @@ public class LassoPainter : MonoBehaviour
 
         if (shouldClose)
         {
+            Debug.Log($"[LassoPainter] Closing shape! Points: {worldPoints.Count}. Start: {startPoint}, End: {lastPoint}, Release: {releasePos}");
+            hasDrawnThisTurn = true; // Mark turn as used
             StartCoroutine(RunJobsAndAnimate());
             lr.positionCount = 0;
         }
@@ -225,37 +257,86 @@ public class LassoPainter : MonoBehaviour
         int jobW = texWidth;
         int jobH = texHeight;
 
-        // Job Buffers
+        Debug.Log("[LassoPainter] Starting Job Scheduling...");
+
+        // Temp Buffers - Dispose immediately after calculation!
+
         NativeArray<float> distGrid = new NativeArray<float>(jobW * jobH, Allocator.TempJob);
         NativeArray<Color32> finalFillColors = new NativeArray<Color32>(jobW * jobH, Allocator.TempJob);
-        NativeList<PixelSortData> sortKeys = new NativeList<PixelSortData>(jobW * jobH, Allocator.TempJob);
+        // Removed BlurBuffer to prevent expansion loop
+        
+        // Persistent buffer for animation - cleaned up in OnDisable/OnDestroy/NextRun
+        if (activeSortKeys.IsCreated) activeSortKeys.Dispose();
+        activeSortKeys = new NativeList<PixelSortData>(jobW * jobH, Allocator.Persistent);
 
-        // Jobs
-        var maskJob = new MaskFromTextureJob { texturePixels = backupTextureState, outputGrid = distGrid, width = jobW, height = jobH, offsetX = minX, offsetY = minY };
-        JobHandle handle = maskJob.Schedule(jobW * jobH, 64);
-
-        var scanlineJob = new ScanlineJob { points = pointBuffer, outputGrid = distGrid, width = jobW, height = jobH, offsetX = minX, offsetY = minY };
-        handle = scanlineJob.Schedule(handle);
-
-        handle = new ChamferJobPass1 { grid = distGrid, width = jobW, height = jobH }.Schedule(handle);
-        handle = new ChamferJobPass2 { grid = distGrid, width = jobW, height = jobH }.Schedule(handle);
-
-        handle = new GradientJob { grid = distGrid, outputColors = finalFillColors, gradientWidth = gradientWidth, smoothness = smoothness, centerColor = centerColor }.Schedule(jobW * jobH, 64, handle);
-
-        NativeArray<Color32> blurBuffer = new NativeArray<Color32>(jobW * jobH, Allocator.TempJob);
-        for (int i = 0; i < blurPasses; i++)
+        try 
         {
-            handle = new BlurHorzJob { source = finalFillColors, destination = blurBuffer, width = jobW, height = jobH, radius = blurRadius }.Schedule(jobW * jobH, 64, handle);
-            handle = new BlurVertJob { source = blurBuffer, destination = finalFillColors, width = jobW, height = jobH, radius = blurRadius }.Schedule(jobW * jobH, 64, handle);
+            // Jobs
+            // Seed the grid with the EXISTING distance field recovered from alpha
+            // This prevents the expansion loop and preserves smooth gradients
+            var maskJob = new MaskFromTextureJob { 
+                texturePixels = backupTextureState, 
+                outputGrid = distGrid, 
+                width = jobW, 
+                height = jobH, 
+                offsetX = minX, 
+                offsetY = minY,
+                gradientWidth = gradientWidth,
+                smoothness = smoothness
+            };
+            JobHandle handle = maskJob.Schedule(jobW * jobH, 64);
+
+            var scanlineJob = new ScanlineJob { points = pointBuffer, outputGrid = distGrid, width = jobW, height = jobH, offsetX = minX, offsetY = minY };
+            handle = scanlineJob.Schedule(handle);
+
+            // Draw caps at start/end to seal gaps
+            var capJob = new DrawCapsJob { 
+                p0 = pointBuffer[0], 
+                p1 = pointBuffer[pointBuffer.Length - 1], 
+                outputGrid = distGrid, 
+                width = jobW, 
+                height = jobH, 
+                offsetX = minX, 
+                offsetY = minY, 
+                radius = gradientWidth 
+            };
+            handle = capJob.Schedule(jobW * jobH, 64, handle);
+
+            handle = new ChamferJobPass1 { grid = distGrid, width = jobW, height = jobH }.Schedule(handle);
+            handle = new ChamferJobPass2 { grid = distGrid, width = jobW, height = jobH }.Schedule(handle);
+
+            handle = new GradientJob { grid = distGrid, outputColors = finalFillColors, gradientWidth = gradientWidth, smoothness = smoothness, centerColor = centerColor }.Schedule(jobW * jobH, 64, handle);
+
+            // Removed Blur Loop. GradientJob provides sufficient softness.
+            // Extra blur causes the "Recovered Distance" to miscalculate and expand the shape.
+
+            handle = new CollectSortDataJob { colors = finalFillColors, distGrid = distGrid, sortList = activeSortKeys, globalOffsetX = minX, globalOffsetY = minY, totalCanvasWidth = texWidth, jobWidth = jobW }.Schedule(handle);
+            handle = new SortPixelJob { list = activeSortKeys }.Schedule(handle);
+            
+            handle.Complete();
+            Debug.Log($"[LassoPainter] Jobs Completed. Total Pixels to Fill: {activeSortKeys.Length}");
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[LassoPainter] Job scheduling failed: {e.Message}\n{e.StackTrace}");
+            isCalculating = false;
+            // Clean up temps in finally block if we were using one, but here we just ensure we return
+            pointBuffer.Dispose();
+            distGrid.Dispose();
+            finalFillColors.Dispose();
+            // blurBuffer.Dispose();
+            yield break;
         }
 
-        handle = new CollectSortDataJob { colors = finalFillColors, sortList = sortKeys, globalOffsetX = minX, globalOffsetY = minY, totalCanvasWidth = texWidth, jobWidth = jobW }.Schedule(handle);
-        handle = new SortPixelJob { list = sortKeys }.Schedule(handle);
-
-        handle.Complete();
+        // DISPOSE TEMPS IMMEDIATELY
+        pointBuffer.Dispose();
+        distGrid.Dispose();
+        finalFillColors.Dispose();
+        // blurBuffer.Dispose();
 
         // Animate
-        int totalPixels = sortKeys.Length;
+        // Animate
+        int totalPixels = activeSortKeys.Length;
         float startTime = Time.time;
         int processedCount = 0;
         NativeArray<Color32> liveTexture = drawTexture.GetRawTextureData<Color32>();
@@ -267,7 +348,8 @@ public class LassoPainter : MonoBehaviour
 
             while (processedCount < targetCount)
             {
-                PixelSortData data = sortKeys[processedCount];
+                if (!activeSortKeys.IsCreated) break; // Safety check
+                PixelSortData data = activeSortKeys[processedCount];
                 liveTexture[data.globalIndex] = data.color;
                 processedCount++;
             }
@@ -285,17 +367,24 @@ public class LassoPainter : MonoBehaviour
         CalculateAndReportProgress();
 
         // Cleanup
-        pointBuffer.Dispose();
-        distGrid.Dispose();
-        finalFillColors.Dispose();
-        blurBuffer.Dispose();
-        sortKeys.Dispose();
+        if (activeSortKeys.IsCreated) activeSortKeys.Dispose();
         if (backupTextureState.IsCreated) backupTextureState.Dispose();
-
+        
         isCalculating = false;
+        
+        // 5. Update Physics from Texture
+        ScatterPoints sp = FindFirstObjectByType<ScatterPoints>();
+        if (sp) sp.UpdateColliderFromTexture(drawTexture);
     }
 
-    public void RefillInk() { currentInk = maxInk; }
+    public void RefillInk()
+    {
+        currentInk = maxInk;
+        hasDrawnThisTurn = false; // Reset turn limit
+        
+        GameUI ui = FindFirstObjectByType<GameUI>();
+        if (ui) ui.UpdateInk(currentInk, maxInk);
+    }
 
     Vector2 GetMouseWorldPos()
     {
@@ -324,7 +413,39 @@ public class LassoPainter : MonoBehaviour
         filledCount.Dispose();
     }
 
-    void OnDestroy() { if (backupTextureState.IsCreated) backupTextureState.Dispose(); }
+    public void EraseRandomAreas(int count, int radius)
+    {
+        if (drawTexture == null) return;
+        
+        NativeArray<Color32> pixels = drawTexture.GetRawTextureData<Color32>();
+        
+        // Simple CPU random pick, GPU erase
+        for(int i=0; i<count; i++)
+        {
+            int randX = UnityEngine.Random.Range(0, texWidth);
+            int randY = UnityEngine.Random.Range(0, texHeight);
+            
+            // Check if we hit anything (optimization)? Pass, just erase.
+            var job = new EraseCircleJob
+            {
+                pixelData = pixels,
+                width = texWidth,
+                height = texHeight,
+                centerX = randX,
+                centerY = randY,
+                radius = radius
+            };
+            job.Schedule(pixels.Length, 64).Complete();
+        }
+        
+        drawTexture.Apply();
+        
+        // Update Physics
+        ScatterPoints sp = FindFirstObjectByType<ScatterPoints>();
+        if (sp) sp.UpdateColliderFromTexture(drawTexture);
+        
+        CalculateAndReportProgress();
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -332,16 +453,99 @@ public class LassoPainter : MonoBehaviour
 // -----------------------------------------------------------------------------
 
 [BurstCompile] struct ClearTextureJob : IJobParallelFor { public NativeArray<Color32> pixelData; public void Execute(int index) => pixelData[index] = new Color32(0, 0, 0, 0); }
-[BurstCompile] struct MaskFromTextureJob : IJobParallelFor { [ReadOnly] public NativeArray<Color32> texturePixels; public NativeArray<float> outputGrid; public int width, height, offsetX, offsetY; public void Execute(int index) { int y = index / width; int x = index % width; int globalIndex = (y + offsetY) * width + (x + offsetX); if (globalIndex >= 0 && globalIndex < texturePixels.Length) outputGrid[index] = (texturePixels[globalIndex].a > 0) ? -1f : 0f; else outputGrid[index] = 0f; } }
+
+[BurstCompile] 
+struct EraseCircleJob : IJobParallelFor 
+{ 
+    public NativeArray<Color32> pixelData; 
+    public int width, height, centerX, centerY, radius;
+
+    public void Execute(int index) 
+    {
+        int y = index / width; 
+        int x = index % width;
+        
+        float dx = x - centerX;
+        float dy = y - centerY;
+        
+        if (dx*dx + dy*dy <= radius*radius)
+        {
+            pixelData[index] = new Color32(0, 0, 0, 0);
+        }
+    } 
+}
+[BurstCompile] 
+struct MaskFromTextureJob : IJobParallelFor 
+{ 
+    [ReadOnly] public NativeArray<Color32> texturePixels; 
+    public NativeArray<float> outputGrid; 
+    public int width, height, offsetX, offsetY; 
+    public float gradientWidth, smoothness;
+
+    public void Execute(int index) 
+    { 
+        int y = index / width; 
+        int x = index % width; 
+        int globalIndex = (y + offsetY) * width + (x + offsetX); 
+        
+        if (globalIndex >= 0 && globalIndex < texturePixels.Length) 
+        {
+            float alpha = texturePixels[globalIndex].a / 255.0f;
+            if (alpha <= 0.001f)
+            {
+                // Background acts as the "Zero Distance" seed (Outside)
+                outputGrid[index] = 0f;
+            }
+            else
+            {
+                // Recover distance from Alpha
+                // alpha = pow(d/W, S) -> d = W * pow(alpha, 1/S)
+                // Small Alpha = Small Distance (Edge/Background)
+                // Large Alpha = Large Distance (Core)
+                float d = gradientWidth * math.pow(alpha, 1.0f / smoothness);
+                outputGrid[index] = d;
+            }
+        }
+        else 
+        {
+            outputGrid[index] = 0f; // Global background is 0
+        }
+    } 
+}
 [BurstCompile] struct ScanlineJob : IJob { [ReadOnly] public NativeArray<int2> points; public NativeArray<float> outputGrid; public int width, height, offsetX, offsetY; public void Execute() { for (int y = 0; y < height; y++) { int globalY = y + offsetY; NativeList<int> nodes = new NativeList<int>(32, Allocator.Temp); int j = points.Length - 1; for (int i = 0; i < points.Length; i++) { int2 pi = points[i]; int2 pj = points[j]; if ((pi.y < globalY && pj.y >= globalY) || (pj.y < globalY && pi.y >= globalY)) { float intersect = pi.x + (float)(globalY - pi.y) / (pj.y - pi.y) * (pj.x - pi.x); nodes.Add((int)intersect); } j = i; } nodes.Sort(); for (int k = 0; k < nodes.Length; k += 2) { if (k + 1 >= nodes.Length) break; int startX = Mathf.Clamp(nodes[k] - offsetX, 0, width - 1); int endX = Mathf.Clamp(nodes[k + 1] - offsetX, 0, width - 1); for (int x = startX; x < endX; x++) outputGrid[y * width + x] = -1f; } nodes.Dispose(); } } }
 [BurstCompile] struct ChamferJobPass1 : IJob { public NativeArray<float> grid; public int width, height; public void Execute() { for (int i = 0; i < grid.Length; i++) if (grid[i] < 0) grid[i] = 99999f; for (int y = 0; y < height; y++) { for (int x = 0; x < width; x++) { int idx = y * width + x; if (grid[idx] > 0) { float minVal = 99999f; if (x > 0) minVal = math.min(minVal, grid[y * width + (x - 1)] + 1.0f); if (y > 0) minVal = math.min(minVal, grid[(y - 1) * width + x] + 1.0f); if (x > 0 && y > 0) minVal = math.min(minVal, grid[(y - 1) * width + (x - 1)] + 1.414f); if (x < width - 1 && y > 0) minVal = math.min(minVal, grid[(y - 1) * width + (x + 1)] + 1.414f); if (minVal < grid[idx]) grid[idx] = minVal; } } } } }
 [BurstCompile] struct ChamferJobPass2 : IJob { public NativeArray<float> grid; public int width, height; public void Execute() { for (int y = height - 1; y >= 0; y--) { for (int x = width - 1; x >= 0; x--) { int idx = y * width + x; if (grid[idx] > 0) { float minVal = grid[idx]; if (x < width - 1) minVal = math.min(minVal, grid[y * width + (x + 1)] + 1.0f); if (y < height - 1) minVal = math.min(minVal, grid[(y + 1) * width + x] + 1.0f); if (x < width - 1 && y < height - 1) minVal = math.min(minVal, grid[(y + 1) * width + (x + 1)] + 1.414f); if (x > 0 && y < height - 1) minVal = math.min(minVal, grid[(y + 1) * width + (x - 1)] + 1.414f); grid[idx] = minVal; } } } } }
-[BurstCompile] struct GradientJob : IJobParallelFor { [ReadOnly] public NativeArray<float> grid; public NativeArray<Color32> outputColors; public float gradientWidth; public float smoothness; public Color32 centerColor; public void Execute(int index) { float d = grid[index]; if (d <= 0 || d > 99990f) { outputColors[index] = new Color32(0, 0, 0, 0); return; } float normalized = math.clamp(d / gradientWidth, 0f, 1f); float alpha = math.pow(normalized, smoothness); outputColors[index] = new Color32(centerColor.r, centerColor.g, centerColor.b, (byte)(alpha * 255)); } }
+[BurstCompile] struct GradientJob : IJobParallelFor { [ReadOnly] public NativeArray<float> grid; public NativeArray<Color32> outputColors; public float gradientWidth; public float smoothness; public Color32 centerColor; public void Execute(int index) { float d = grid[index]; if (d <= 0) { outputColors[index] = new Color32(0, 0, 0, 0); return; } float normalized = math.clamp(d / gradientWidth, 0f, 1f); float alpha = math.pow(normalized, smoothness); outputColors[index] = new Color32(centerColor.r, centerColor.g, centerColor.b, (byte)(alpha * 255)); } }
 [BurstCompile] struct BlurHorzJob : IJobParallelFor { [ReadOnly] public NativeArray<Color32> source; public NativeArray<Color32> destination; public int width, height, radius; public void Execute(int index) { int y = index / width; int x = index % width; float4 sum = float4.zero; int count = 0; for (int k = -radius; k <= radius; k++) { int px = math.clamp(x + k, 0, width - 1); Color32 c = source[y * width + px]; sum += new float4(c.r, c.g, c.b, c.a); count++; } sum /= count; destination[index] = new Color32((byte)sum.x, (byte)sum.y, (byte)sum.z, (byte)sum.w); } }
 [BurstCompile] struct BlurVertJob : IJobParallelFor { [ReadOnly] public NativeArray<Color32> source; public NativeArray<Color32> destination; public int width, height, radius; public void Execute(int index) { int y = index / width; int x = index % width; float4 sum = float4.zero; int count = 0; for (int k = -radius; k <= radius; k++) { int py = math.clamp(y + k, 0, height - 1); Color32 c = source[py * width + x]; sum += new float4(c.r, c.g, c.b, c.a); count++; } sum /= count; destination[index] = new Color32((byte)sum.x, (byte)sum.y, (byte)sum.z, (byte)sum.w); } }
 struct PixelSortData : System.IComparable<PixelSortData> { public int globalIndex; public Color32 color; public float sortKey; public int CompareTo(PixelSortData other) => other.sortKey.CompareTo(sortKey); }
-[BurstCompile] struct CollectSortDataJob : IJob { [ReadOnly] public NativeArray<Color32> colors; public NativeList<PixelSortData> sortList; public int globalOffsetX, globalOffsetY, totalCanvasWidth, jobWidth; public void Execute() { for (int i = 0; i < colors.Length; i++) { if (colors[i].a > 0) { int localY = i / jobWidth; int localX = i % jobWidth; int globalIndex = (localY + globalOffsetY) * totalCanvasWidth + (localX + globalOffsetX); sortList.Add(new PixelSortData { globalIndex = globalIndex, color = colors[i], sortKey = colors[i].a }); } } } }
+[BurstCompile] struct CollectSortDataJob : IJob { [ReadOnly] public NativeArray<Color32> colors; [ReadOnly] public NativeArray<float> distGrid; public NativeList<PixelSortData> sortList; public int globalOffsetX, globalOffsetY, totalCanvasWidth, jobWidth; public void Execute() { for (int i = 0; i < colors.Length; i++) { if (colors[i].a > 0) { int localY = i / jobWidth; int localX = i % jobWidth; int globalIndex = (localY + globalOffsetY) * totalCanvasWidth + (localX + globalOffsetX); sortList.Add(new PixelSortData { globalIndex = globalIndex, color = colors[i], sortKey = distGrid[i] }); } } } }
 [BurstCompile] struct SortPixelJob : IJob { public NativeList<PixelSortData> list; public void Execute() => list.Sort(); }
+
+[BurstCompile]
+struct DrawCapsJob : IJobParallelFor
+{
+    public int2 p0, p1;
+    public NativeArray<float> outputGrid;
+    public int width, height, offsetX, offsetY;
+    public float radius;
+
+    public void Execute(int index)
+    {
+        int y = index / width;
+        int x = index % width;
+        int globalY = y + offsetY;
+        int globalX = x + offsetX;
+
+        float d0 = math.distance(new float2(globalX, globalY), new float2(p0.x, p0.y));
+        float d1 = math.distance(new float2(globalX, globalY), new float2(p1.x, p1.y));
+
+        if (d0 <= radius || d1 <= radius)
+        {
+            outputGrid[index] = -1f;
+        }
+    }
+}
 
 // --- NEW JOB: COUNT PIXELS ---
 [BurstCompile]
