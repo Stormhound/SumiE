@@ -46,6 +46,7 @@ public class GameManager : MonoBehaviour
     public int enemyCount = 3;
     public int enemyStartRadius = 30;
     public float enemyExpansionPerTurn = 10f;
+    public Color32 enemyColor = new Color32(255, 0, 0, 255);
     public UnityEvent OnPlayerTurnStart;
     public UnityEvent OnEnemyTurnStart;
 

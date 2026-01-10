@@ -22,7 +22,7 @@ public class LassoPainter : MonoBehaviour
     [Range(0, 10)] public int blurPasses = 3;
     public int blurRadius = 2;
     [Range(0.1f, 1f)] public float resolutionScale = 0.5f;
-    public Color32 enemyColor = new Color32(255, 0, 0, 255);
+    public Color32 enemyColor => GameManager.Instance != null ? GameManager.Instance.enemyColor : new Color32(255, 0, 0, 255);
 
     [Tooltip("Distance in pixels from the edge where the ink becomes fully opaque.")]
     public float gradientWidth = 24.0f;

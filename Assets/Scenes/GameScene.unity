@@ -916,6 +916,7 @@ MonoBehaviour:
   inkConsumptionRate: 1
   currentInk: 0
   fillDuration: 1
+  enemyExpansionDuration: 1
 --- !u!114 &843667517
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1158,8 +1159,12 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   currentTurn: 0
-  enemyEraseCount: 1
-  enemyMaxRadius: 20
+  enemyCount: 3
+  enemyStartRadius: 30
+  enemyExpansionPerTurn: 10
+  enemyColor:
+    serializedVersion: 2
+    rgba: 4278190248
   OnPlayerTurnStart:
     m_PersistentCalls:
       m_Calls: []
