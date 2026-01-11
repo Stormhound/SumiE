@@ -90,6 +90,7 @@ public class LassoPainter : MonoBehaviour
         if (FindFirstObjectByType<GameUI>() == null) gameObject.AddComponent<GameUI>();
 
         InitializeTexture();
+        RefillInk();
     }
 
     void InitializeTexture()
@@ -241,6 +242,12 @@ public class LassoPainter : MonoBehaviour
             {
                 currentInk = 0;
                 EndStroke();
+                
+                // Auto End Turn
+                if (GameManager.Instance != null && GameManager.Instance.currentTurn == GameManager.TurnState.Player)
+                {
+                    GameManager.Instance.EndPlayerTurn();
+                }
             }
         }
     }

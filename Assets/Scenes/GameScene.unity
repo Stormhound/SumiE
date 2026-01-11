@@ -1623,7 +1623,7 @@ MonoBehaviour:
   minPointDistance: 0.1
   closeThreshold: 1
   maxInk: 100
-  inkConsumptionRate: 1
+  inkConsumptionRate: 10
   currentInk: 0
   fillDuration: 1
   enemyExpansionDuration: 1

@@ -36,7 +36,8 @@ public class GameUI : MonoBehaviour
         
         if (inkSlider != null)
         {
-             targetInkValue = inkSlider.value;
+             // Force start full
+             inkSlider.value = targetInkValue; 
         }
     }
 
