@@ -7,12 +7,14 @@ public class UIManagers : MonoBehaviour
 {
     [SerializeField] private GameObject MainMenu;
     [SerializeField] private GameObject SettingsMenu;
+    [SerializeField] private GameObject LevelMenu;
 
 
-  
+
     public void StartButton()
     {
-        SceneManager.LoadScene("GameScene");
+        LevelMenu.SetActive(true);
+        MainMenu.SetActive(false);
     }
 
     public void QuitButton()
@@ -26,10 +28,15 @@ public class UIManagers : MonoBehaviour
        SettingsMenu.SetActive(true);
     }
 
-    public void BackButton()
+    public void BackButtonSettings()
     {
         SettingsMenu.SetActive(false);
         MainMenu.SetActive(true);        
+    }
+    public void BackButtonLevel()
+    {
+        LevelMenu?.SetActive(false);
+        MainMenu.SetActive(true);
     }
  
     

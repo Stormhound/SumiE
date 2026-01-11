@@ -8,7 +8,9 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private Button startGameButton;
     [SerializeField] private Button quitButton;
     [SerializeField] private Button settingsButton;
-    [SerializeField] private Button BackButton;
+    [SerializeField] private Button BackButtonSettings;
+    [SerializeField] private Button BackButtonLevel;
+    
 
     [Header("Animation Settings")]
     [SerializeField] private float buttonHoverScale = 1.1f;
@@ -48,12 +50,17 @@ public class MainMenuController : MonoBehaviour
             AddButtonHoverEffect(settingsButton);          
         }
 
-        if (BackButton != null)
+        if (BackButtonSettings != null)
         {
-            AddButtonHoverEffect(BackButton);           
+            AddButtonHoverEffect(BackButtonSettings);           
         }
 
-        
+        if (BackButtonLevel != null)
+        {
+            AddButtonHoverEffect(BackButtonLevel);
+        }
+
+
     }
 
     private void AddButtonHoverEffect(Button button)
