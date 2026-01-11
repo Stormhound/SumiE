@@ -158,7 +158,6 @@ public class LassoPainter : MonoBehaviour
             enemySeeds.Add(new EnemySeed { pos = new int2(x, y), radius = startRadius, active = 1 });
             
             // Burn the initial hole
-            GameManager.Instance.UpdateEnemyCount(spawned + 1); // Temporary update
             spawned++;
         }
         
@@ -175,7 +174,7 @@ public class LassoPainter : MonoBehaviour
         drawTexture.Apply();
 
         // Report
-        GameManager.Instance.UpdateEnemyCount(enemySeeds.Length);
+        // GameManager.Instance.UpdateEnemyCount(enemySeeds.Length);
         
         // Update Physics
         ScatterPoints sp = FindFirstObjectByType<ScatterPoints>();
@@ -512,18 +511,21 @@ public class LassoPainter : MonoBehaviour
 
         NativeArray<Color32> currentPixels = drawTexture.GetRawTextureData<Color32>();
         NativeReference<int> filledCount = new NativeReference<int>(Allocator.TempJob);
+        NativeReference<int> enemyCount = new NativeReference<int>(Allocator.TempJob);
 
         var countJob = new CountPixelsJob
         {
             pixelData = currentPixels,
             coloredCount = filledCount,
+            enemyFilledCount = enemyCount,
             enemyColor = enemyColor
         };
 
         countJob.Schedule().Complete();
 
-        GameManager.Instance.UpdateGameState(currentPixels.Length, filledCount.Value);
+        GameManager.Instance.UpdateGameState(currentPixels.Length, filledCount.Value, enemyCount.Value);
         filledCount.Dispose();
+        enemyCount.Dispose();
     }
 
     public IEnumerator ExpandEnemiesRoutine(float expansionAmount)
@@ -548,8 +550,6 @@ public class LassoPainter : MonoBehaviour
         // Update Count UI
         int activeCount = 0;
         for (int i=0; i<enemySeeds.Length; i++) if (enemySeeds[i].active == 1) activeCount++;
-        GameManager.Instance.UpdateEnemyCount(activeCount);
-        
         if (activeCount == 0)
         {
             Debug.Log("[LassoPainter] All enemies captured! Filling canvas...");
@@ -842,20 +842,26 @@ struct CountPixelsJob : IJob
 {
     [ReadOnly] public NativeArray<Color32> pixelData;
     public NativeReference<int> coloredCount;
+    public NativeReference<int> enemyFilledCount;
     public Color32 enemyColor;
 
     public void Execute()
     {
-        int count = 0;
+        int pCount = 0;
+        int eCount = 0;
         for (int i = 0; i < pixelData.Length; i++)
         {
             Color32 c = pixelData[i];
             bool isEnemy = (c.r == enemyColor.r && c.g == enemyColor.g && c.b == enemyColor.b);
             
-            // Count only PLAYER ink
-            if (c.a > 0 && !isEnemy) count++;
+            // Count PLAYER ink
+            if (c.a > 0 && !isEnemy) pCount++;
+            
+            // Count ENEMY ink (Assuming enemy ink is always fully opaque or just by color match)
+            if (isEnemy) eCount++;
         }
-        coloredCount.Value = count;
+        coloredCount.Value = pCount;
+        enemyFilledCount.Value = eCount;
     }
 }
 

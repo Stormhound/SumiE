@@ -13,7 +13,7 @@ public class GameUI : MonoBehaviour
     [Header("UI References")]
     [SerializeField] private Slider inkSlider;
     [SerializeField] private Button endTurnButton;
-    [SerializeField] private TextMeshProUGUI enemyCountText;
+    [SerializeField] private TextMeshProUGUI turnCountText;
 
     private GameManager gameManager;
     private float targetInkValue = 100f; // For smooth animation
@@ -26,6 +26,7 @@ public class GameUI : MonoBehaviour
         {
             gameManager.OnEnemyTurnStart.AddListener(OnEnemyTurn);
             gameManager.OnPlayerTurnStart.AddListener(OnPlayerTurn);
+            gameManager.OnTurnChanged.AddListener(UpdateTurnCount);
         }
 
         if (endTurnButton != null)
@@ -69,8 +70,8 @@ public class GameUI : MonoBehaviour
         targetInkValue = (current / max) * 100f;
     }
 
-    public void UpdateEnemyCount(int count)
+    public void UpdateTurnCount(int current, int max)
     {
-        if (enemyCountText) enemyCountText.text = $"Enemies: {count}";
+        if (turnCountText) turnCountText.text = $"{current}/{max}";
     }
 }

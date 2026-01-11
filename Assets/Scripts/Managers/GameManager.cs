@@ -12,6 +12,8 @@ public class GameManager : MonoBehaviour
     [Header("Settings")]
     [Tooltip("Percentage required to win the level.")]
     public float winThreshold = 95f;
+    [Tooltip("Percentage of enemy coverage that causes a loss.")]
+    public float loseThreshold = 90f;
     [Tooltip("How fast the progress bar catches up (Higher = Faster).")]
     public float animationSpeed = 5.0f; // NEW: Controls smoothness
 
@@ -44,11 +46,16 @@ public class GameManager : MonoBehaviour
     
     [Header("Turn Settings")]
     public int enemyCount = 3;
+    public int maxTurns = 20;
     public int enemyStartRadius = 30;
     public float enemyExpansionPerTurn = 10f;
     public Color32 enemyColor = new Color32(255, 0, 0, 255);
     public UnityEvent OnPlayerTurnStart;
     public UnityEvent OnEnemyTurnStart;
+    public UnityEvent<int, int> OnTurnChanged;
+    public UnityEvent OnGameLost;
+
+    private int currentTurnCount = 1;
 
     void Start()
     {
@@ -58,6 +65,9 @@ public class GameManager : MonoBehaviour
             // Defer slightly to ensure texture init
             StartCoroutine(InitEnemiesRoutine(painter));
         }
+
+        // Initialize UI with turn count
+        OnTurnChanged?.Invoke(currentTurnCount, maxTurns);
     }
     
     System.Collections.IEnumerator InitEnemiesRoutine(LassoPainter painter)
@@ -89,6 +99,19 @@ public class GameManager : MonoBehaviour
 
         // End Enemy Turn
         yield return new WaitForSeconds(0.5f);
+        
+        // CHECK TURN LIMIT
+        currentTurnCount++;
+        OnTurnChanged?.Invoke(currentTurnCount, maxTurns);
+
+        if (currentTurnCount > maxTurns)
+        {
+            Debug.Log("Game Over: Max Turns Reached");
+            OnGameLost?.Invoke();
+            // Do not switch back to player turn
+            yield break;
+        }
+
         currentTurn = TurnState.Player;
         
         // Refresh Player
@@ -96,7 +119,7 @@ public class GameManager : MonoBehaviour
         OnPlayerTurnStart?.Invoke();
     }
 
-    public void UpdateGameState(int totalPixels, int filledPixels)
+    public void UpdateGameState(int totalPixels, int filledPixels, int enemyPixels)
     {
         if (totalPixels == 0) return;
 
@@ -107,13 +130,22 @@ public class GameManager : MonoBehaviour
         // 2. Check Win Condition
         if (!levelCompleteTriggered && targetPercentage >= winThreshold)
         {
+            levelCompleteTriggered = true;
             OnLevelComplete?.Invoke();
+            return;
+        }
+
+        // 3. Check Lose Condition (Enemy Area)
+        float enemyRatio = (float)enemyPixels / totalPixels;
+        float enemyPercentage = enemyRatio * 100f;
+        
+        if (!levelCompleteTriggered && enemyPercentage >= loseThreshold)
+        {
+            levelCompleteTriggered = true;
+            Debug.Log($"Game Over: Enemy covered {enemyPercentage:F1}% (Threshold: {loseThreshold}%)");
+            OnGameLost?.Invoke();
         }
     }
 
-    public void UpdateEnemyCount(int count)
-    {
-        GameUI ui = FindFirstObjectByType<GameUI>();
-        if (ui != null) ui.UpdateEnemyCount(count);
-    }
+
 }
