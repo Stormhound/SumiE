@@ -266,7 +266,6 @@ GameObject:
   m_Component:
   - component: {fileID: 76010132}
   - component: {fileID: 76010131}
-  - component: {fileID: 76010130}
   - component: {fileID: 76010133}
   m_Layer: 0
   m_Name: UIManager
@@ -275,27 +274,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &76010130
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 76010129}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4d764d11d7b15b54592a1fec41da2f69, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::MainMenuController
-  startGameButton: {fileID: 833283025}
-  quitButton: {fileID: 2042041079}
-  settingsButton: {fileID: 555259342}
-  BackButtonSettings: {fileID: 831195919}
-  BackButtonLevel: {fileID: 2120267204}
-  buttonHoverScale: 1.1
-  animationSpeed: 0.2
-  SFXSource: {fileID: 439541894}
-  ButtonSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
 --- !u!114 &76010131
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1049,6 +1027,7 @@ GameObject:
   - component: {fileID: 555259344}
   - component: {fileID: 555259343}
   - component: {fileID: 555259342}
+  - component: {fileID: 555259345}
   m_Layer: 5
   m_Name: SettingsButton
   m_TagString: Untagged
@@ -1169,6 +1148,25 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 555259340}
   m_CullTransparentMesh: 1
+--- !u!114 &555259345
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 555259340}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e3fc6cc8cc0c2f4088a07018d10a7e0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIAnimator
+  hoverScale: 1.1
+  clickScale: 0.95
+  duration: 0.2
+  easeType: 27
+  hoverSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  clickSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  audioSource: {fileID: 439541894}
 --- !u!1 &655940725
 GameObject:
   m_ObjectHideFlags: 0
@@ -1498,6 +1496,7 @@ GameObject:
   - component: {fileID: 833283027}
   - component: {fileID: 833283026}
   - component: {fileID: 833283025}
+  - component: {fileID: 833283028}
   m_Layer: 5
   m_Name: StartGameButton
   m_TagString: Untagged
@@ -1618,6 +1617,25 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 833283023}
   m_CullTransparentMesh: 1
+--- !u!114 &833283028
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 833283023}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e3fc6cc8cc0c2f4088a07018d10a7e0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIAnimator
+  hoverScale: 1.1
+  clickScale: 0.95
+  duration: 0.2
+  easeType: 27
+  hoverSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  clickSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  audioSource: {fileID: 439541894}
 --- !u!1 &946961664
 GameObject:
   m_ObjectHideFlags: 0
@@ -2814,6 +2832,7 @@ GameObject:
   - component: {fileID: 2042041081}
   - component: {fileID: 2042041080}
   - component: {fileID: 2042041079}
+  - component: {fileID: 2042041082}
   m_Layer: 5
   m_Name: QuitButton
   m_TagString: Untagged
@@ -2934,6 +2953,25 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2042041077}
   m_CullTransparentMesh: 1
+--- !u!114 &2042041082
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2042041077}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e3fc6cc8cc0c2f4088a07018d10a7e0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIAnimator
+  hoverScale: 1.1
+  clickScale: 0.95
+  duration: 0.2
+  easeType: 27
+  hoverSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  clickSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  audioSource: {fileID: 439541894}
 --- !u!1 &2120267202
 GameObject:
   m_ObjectHideFlags: 0
