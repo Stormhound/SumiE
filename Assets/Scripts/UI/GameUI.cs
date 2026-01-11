@@ -20,6 +20,15 @@ public class GameUI : MonoBehaviour
     private GameManager gameManager;
     private float targetInkValue = 100f; // For smooth animation
 
+    void Awake()
+    {
+        // Auto-resolve if missing
+        if (inkSlider == null) inkSlider = GetComponentInChildren<Slider>();
+        if (endTurnButton == null) endTurnButton = GetComponentInChildren<Button>();
+        if (turnCountText == null) turnCountText = GetComponentInChildren<TextMeshProUGUI>();
+        if (paintingDisplay == null) paintingDisplay = GetComponentInChildren<RawImage>();
+    }
+
     void Start()
     {
         gameManager = GameManager.Instance;
@@ -30,14 +39,12 @@ public class GameUI : MonoBehaviour
             gameManager.OnPlayerTurnStart.AddListener(OnPlayerTurn);
             gameManager.OnTurnChanged.AddListener(UpdateTurnCount);
             
+            // Sync initial state
+            UpdateTurnCount(1, gameManager.MaxTurns); // Force init
+            
             // Set Painting Texture from Config
             if (paintingDisplay != null && gameManager.CurrentConfig != null && gameManager.CurrentConfig.paintingTexture != null)
             {
-                // Assuming the RawImage uses a material that expects _PaintingTex
-                // Or if user meant the RawImage's texture itself? "set the that texture to the _PaintingTex field" implies Shader property.
-                // But usually for a UI element displaying a painting, we might just set the texture.
-                // However, user said "grab the material and set the that texture to the _PaintingTex field".
-                
                 if (paintingDisplay.material != null)
                 {
                     paintingDisplay.material.SetTexture("_PaintingTex", gameManager.CurrentConfig.paintingTexture);
@@ -47,12 +54,14 @@ public class GameUI : MonoBehaviour
 
         if (endTurnButton != null)
         {
+            endTurnButton.onClick.RemoveListener(OnEndTurnClicked); // Prevent doubles
             endTurnButton.onClick.AddListener(OnEndTurnClicked);
         }
         
         if (inkSlider != null)
         {
              // Force start full
+             targetInkValue = 100f; // Reset target too
              inkSlider.value = targetInkValue; 
         }
     }
