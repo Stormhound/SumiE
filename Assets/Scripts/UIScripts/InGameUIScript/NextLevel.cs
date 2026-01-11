@@ -5,19 +5,7 @@ using UnityEngine.UI;
 
 public class NextLevel : MonoBehaviour
 {
-
-    public GameObject WinPanel;
-    public void LevelComplete(Slider slider)
-    {
-     if (slider.value >= 80f)
-        {      
-          UnlockNewLevel();
-          WinPanel.SetActive(true);
-        }
-     
-    }
-
-    private void UnlockNewLevel()
+    public void UnlockNewLevel()
     {
         if(SceneManager.GetActiveScene().buildIndex >= PlayerPrefs.GetInt("ReachedIndex"))
         {

@@ -507,6 +507,7 @@ GameObject:
   - component: {fileID: 258300503}
   - component: {fileID: 258300502}
   - component: {fileID: 258300501}
+  - component: {fileID: 258300504}
   m_Layer: 5
   m_Name: NextLevelButton
   m_TagString: Untagged
@@ -577,9 +578,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
+      - m_Target: {fileID: 266401478}
         m_TargetAssemblyTypeName: NextLevel, Assembly-CSharp
-        m_MethodName: NextLevelButton
+        m_MethodName: UnlockNewLevel
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -627,6 +628,69 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 258300499}
   m_CullTransparentMesh: 1
+--- !u!114 &258300504
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 258300499}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e3fc6cc8cc0c2f4088a07018d10a7e0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIAnimator
+  hoverScale: 1.1
+  clickScale: 0.95
+  duration: 0.2
+  easeType: 27
+  hoverSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  clickSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  audioSource: {fileID: 1775961325}
+--- !u!1 &266401477
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 266401479}
+  - component: {fileID: 266401478}
+  m_Layer: 0
+  m_Name: LevelManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &266401478
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 266401477}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8a113ed57206a274a8da8e016375b1fa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NextLevel
+--- !u!4 &266401479
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 266401477}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &322382613
 GameObject:
   m_ObjectHideFlags: 0
@@ -715,6 +779,7 @@ GameObject:
   - component: {fileID: 364272181}
   - component: {fileID: 364272180}
   - component: {fileID: 364272179}
+  - component: {fileID: 364272182}
   m_Layer: 5
   m_Name: RestartLevelButton
   m_TagString: Untagged
@@ -785,9 +850,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
-        m_TargetAssemblyTypeName: NextLevel, Assembly-CSharp
-        m_MethodName: NextLevelButton
+      - m_Target: {fileID: 1800053303}
+        m_TargetAssemblyTypeName: GameUI, Assembly-CSharp
+        m_MethodName: RestartLevel
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -835,6 +900,25 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 364272177}
   m_CullTransparentMesh: 1
+--- !u!114 &364272182
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 364272177}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e3fc6cc8cc0c2f4088a07018d10a7e0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIAnimator
+  hoverScale: 1.1
+  clickScale: 0.95
+  duration: 0.2
+  easeType: 27
+  hoverSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  clickSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  audioSource: {fileID: 1775961325}
 --- !u!1 &373476485
 GameObject:
   m_ObjectHideFlags: 0
@@ -959,7 +1043,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1344c3c82d62a2a41a3576d8abb8e3ea, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.RawImage
-  m_Material: {fileID: 2100000, guid: 16a6da5d12ede3048b4845fcfe58f840, type: 2}
+  m_Material: {fileID: 2100000, guid: 76bad28edec46b74d94a56fa6605bd7b, type: 2}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
@@ -2065,6 +2149,7 @@ MonoBehaviour:
   filledPercentage: 0
   winThreshold: 95
   loseThreshold: 90
+  minPlayerInkThreshold: 0.5
   animationSpeed: 5
   OnProgressChanged:
     m_PersistentCalls:
@@ -2739,3 +2824,4 @@ SceneRoots:
   - {fileID: 1734931360}
   - {fileID: 227097740}
   - {fileID: 1800053304}
+  - {fileID: 266401479}

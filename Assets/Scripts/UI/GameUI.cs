@@ -4,6 +4,7 @@ using UnityEngine.Events;
 // using Holoville.HOTween; // Removed missing dependency
 
 using TMPro;
+using UnityEngine.SceneManagement;
 
 /// <summary>
 /// Prototyping UI builder that spawns a Canvas with a Slider and Button.
@@ -74,5 +75,10 @@ public class GameUI : MonoBehaviour
     public void UpdateTurnCount(int current, int max)
     {
         if (turnCountText) turnCountText.text = $"{current}/{max}";
+    }
+
+    public void RestartLevel()
+    {
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
 }

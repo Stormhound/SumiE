@@ -1227,6 +1227,7 @@ GameObject:
   - component: {fileID: 788146950}
   - component: {fileID: 788146949}
   - component: {fileID: 788146948}
+  - component: {fileID: 788146952}
   m_Layer: 5
   m_Name: MusicToggleButton
   m_TagString: Untagged
@@ -1352,6 +1353,25 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 788146946}
   m_CullTransparentMesh: 1
+--- !u!114 &788146952
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 788146946}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e3fc6cc8cc0c2f4088a07018d10a7e0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIAnimator
+  hoverScale: 1.1
+  clickScale: 0.95
+  duration: 0.2
+  easeType: 27
+  hoverSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  clickSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  audioSource: {fileID: 439541894}
 --- !u!1 &831195918
 GameObject:
   m_ObjectHideFlags: 0
@@ -1364,6 +1384,7 @@ GameObject:
   - component: {fileID: 831195921}
   - component: {fileID: 831195920}
   - component: {fileID: 831195919}
+  - component: {fileID: 831195923}
   m_Layer: 5
   m_Name: BackButtonSettings
   m_TagString: Untagged
@@ -1484,6 +1505,25 @@ RectTransform:
   m_AnchoredPosition: {x: -2, y: -385}
   m_SizeDelta: {x: 400, y: 135}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &831195923
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 831195918}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e3fc6cc8cc0c2f4088a07018d10a7e0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIAnimator
+  hoverScale: 1.1
+  clickScale: 0.95
+  duration: 0.2
+  easeType: 27
+  hoverSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  clickSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  audioSource: {fileID: 439541894}
 --- !u!1 &833283023
 GameObject:
   m_ObjectHideFlags: 0
@@ -2182,6 +2222,7 @@ GameObject:
   - component: {fileID: 1374139972}
   - component: {fileID: 1374139974}
   - component: {fileID: 1374139973}
+  - component: {fileID: 1374139975}
   m_Layer: 5
   m_Name: Handle
   m_TagString: Untagged
@@ -2246,6 +2287,25 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1374139971}
   m_CullTransparentMesh: 1
+--- !u!114 &1374139975
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1374139971}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e3fc6cc8cc0c2f4088a07018d10a7e0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIAnimator
+  hoverScale: 1.1
+  clickScale: 0.95
+  duration: 0.2
+  easeType: 27
+  hoverSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  clickSound: {fileID: 0}
+  audioSource: {fileID: 439541894}
 --- !u!1 &1403739697
 GameObject:
   m_ObjectHideFlags: 0
@@ -2606,6 +2666,7 @@ GameObject:
   - component: {fileID: 1792901479}
   - component: {fileID: 1792901481}
   - component: {fileID: 1792901480}
+  - component: {fileID: 1792901482}
   m_Layer: 5
   m_Name: Handle
   m_TagString: Untagged
@@ -2670,6 +2731,25 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1792901478}
   m_CullTransparentMesh: 1
+--- !u!114 &1792901482
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1792901478}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e3fc6cc8cc0c2f4088a07018d10a7e0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIAnimator
+  hoverScale: 1.1
+  clickScale: 0.95
+  duration: 0.2
+  easeType: 27
+  hoverSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  clickSound: {fileID: 0}
+  audioSource: {fileID: 439541894}
 --- !u!1 &1860978462
 GameObject:
   m_ObjectHideFlags: 0
@@ -2756,6 +2836,7 @@ GameObject:
   - component: {fileID: 1931225493}
   - component: {fileID: 1931225495}
   - component: {fileID: 1931225494}
+  - component: {fileID: 1931225496}
   m_Layer: 5
   m_Name: Handle
   m_TagString: Untagged
@@ -2820,6 +2901,25 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1931225492}
   m_CullTransparentMesh: 1
+--- !u!114 &1931225496
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1931225492}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e3fc6cc8cc0c2f4088a07018d10a7e0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UIAnimator
+  hoverScale: 1.1
+  clickScale: 0.95
+  duration: 0.2
+  easeType: 27
+  hoverSound: {fileID: 8300000, guid: 8ac06d1035ebece4a8365752a0dc17c3, type: 3}
+  clickSound: {fileID: 0}
+  audioSource: {fileID: 439541894}
 --- !u!1 &2042041077
 GameObject:
   m_ObjectHideFlags: 0

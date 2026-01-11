@@ -14,6 +14,8 @@ public class GameManager : MonoBehaviour
     public float winThreshold = 95f;
     [Tooltip("Percentage of enemy coverage that causes a loss.")]
     public float loseThreshold = 90f;
+    [Tooltip("Minimum percentage of player ink required to stay alive.")]
+    public float minPlayerInkThreshold = 0.5f;
     [Tooltip("How fast the progress bar catches up (Higher = Faster).")]
     public float animationSpeed = 5.0f; // NEW: Controls smoothness
 
@@ -119,6 +121,8 @@ public class GameManager : MonoBehaviour
         OnPlayerTurnStart?.Invoke();
     }
 
+
+
     public void UpdateGameState(int totalPixels, int filledPixels, int enemyPixels)
     {
         if (totalPixels == 0) return;
@@ -143,6 +147,16 @@ public class GameManager : MonoBehaviour
         {
             levelCompleteTriggered = true;
             Debug.Log($"Game Over: Enemy covered {enemyPercentage:F1}% (Threshold: {loseThreshold}%)");
+            OnGameLost?.Invoke();
+            return;
+        }
+
+        // 4. Check Lose Condition (Minimum Player Ink)
+        // We only check this after the game has "started" (enemyPixels > 0) to avoid frame 0 issues.
+        if (!levelCompleteTriggered && targetPercentage < minPlayerInkThreshold && enemyPixels > 0)
+        {
+            levelCompleteTriggered = true;
+            Debug.Log($"Game Over: Player Ink dropped below {minPlayerInkThreshold}% ({targetPercentage:F1}%)");
             OnGameLost?.Invoke();
         }
     }
