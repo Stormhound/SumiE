@@ -15,6 +15,7 @@ public class GameUI : MonoBehaviour
     [SerializeField] private Slider inkSlider;
     [SerializeField] private Button endTurnButton;
     [SerializeField] private TextMeshProUGUI turnCountText;
+    [SerializeField] private RawImage paintingDisplay; // New Reference
 
     private GameManager gameManager;
     private float targetInkValue = 100f; // For smooth animation
@@ -28,6 +29,20 @@ public class GameUI : MonoBehaviour
             gameManager.OnEnemyTurnStart.AddListener(OnEnemyTurn);
             gameManager.OnPlayerTurnStart.AddListener(OnPlayerTurn);
             gameManager.OnTurnChanged.AddListener(UpdateTurnCount);
+            
+            // Set Painting Texture from Config
+            if (paintingDisplay != null && gameManager.CurrentConfig != null && gameManager.CurrentConfig.paintingTexture != null)
+            {
+                // Assuming the RawImage uses a material that expects _PaintingTex
+                // Or if user meant the RawImage's texture itself? "set the that texture to the _PaintingTex field" implies Shader property.
+                // But usually for a UI element displaying a painting, we might just set the texture.
+                // However, user said "grab the material and set the that texture to the _PaintingTex field".
+                
+                if (paintingDisplay.material != null)
+                {
+                    paintingDisplay.material.SetTexture("_PaintingTex", gameManager.CurrentConfig.paintingTexture);
+                }
+            }
         }
 
         if (endTurnButton != null)

@@ -288,7 +288,7 @@ AudioSource:
   m_PlayOnAwake: 1
   m_Volume: 1
   m_Pitch: 1
-  Loop: 0
+  Loop: 1
   Mute: 0
   Spatialize: 0
   SpatializePostEffects: 0
@@ -1043,7 +1043,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1344c3c82d62a2a41a3576d8abb8e3ea, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.RawImage
-  m_Material: {fileID: 2100000, guid: 76bad28edec46b74d94a56fa6605bd7b, type: 2}
+  m_Material: {fileID: 2100000, guid: 16a6da5d12ede3048b4845fcfe58f840, type: 2}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
@@ -1697,7 +1697,6 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 64
   outputDisplay: {fileID: 412906135}
-  centerColor: {r: 1, g: 1, b: 1, a: 1}
   blurPasses: 3
   blurRadius: 5
   resolutionScale: 0.5
@@ -1706,8 +1705,6 @@ MonoBehaviour:
   smoothTime: 0.1
   minPointDistance: 0.1
   closeThreshold: 1
-  maxInk: 100
-  inkConsumptionRate: 10
   currentInk: 0
   fillDuration: 1
   enemyExpansionDuration: 1
@@ -1723,12 +1720,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0f3d52d90ff0bd149a75369b27cf9190, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ScatterPoints
-  pointCount: 3
-  minDistance: 0.6
-  pointRadius: 0.085
   colliderSegments: 3
-  edgePadding: 0.01
-  blobColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!60 &843667518
 PolygonCollider2D:
   m_ObjectHideFlags: 0
@@ -2146,11 +2138,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0b935051c1d161e4db4f631790d91fb2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
+  availableConfigs:
+  - {fileID: 11400000, guid: 845f9c530fdbaec4fab3d7339957c1f7, type: 2}
+  - {fileID: 11400000, guid: deb9f2fe584b31d4aba4d0efa75263a4, type: 2}
+  - {fileID: 11400000, guid: bb07daa30bfb62c42ae8c18f7896b6bb, type: 2}
+  - {fileID: 11400000, guid: 108c641b6fc203c44aacc118d07eb4d3, type: 2}
+  currentLevelConfig: {fileID: 11400000, guid: 845f9c530fdbaec4fab3d7339957c1f7, type: 2}
   filledPercentage: 0
-  winThreshold: 95
-  loseThreshold: 90
-  minPlayerInkThreshold: 0.5
-  animationSpeed: 5
   OnProgressChanged:
     m_PersistentCalls:
       m_Calls:
@@ -2182,13 +2176,6 @@ MonoBehaviour:
           m_BoolArgument: 1
         m_CallState: 2
   currentTurn: 0
-  enemyCount: 3
-  maxTurns: 20
-  enemyStartRadius: 100
-  enemyExpansionPerTurn: 40
-  enemyColor:
-    serializedVersion: 2
-    rgba: 4278190248
   OnPlayerTurnStart:
     m_PersistentCalls:
       m_Calls: []
@@ -2721,6 +2708,7 @@ MonoBehaviour:
   inkSlider: {fileID: 1489802695}
   endTurnButton: {fileID: 916802788}
   turnCountText: {fileID: 68761562}
+  paintingDisplay: {fileID: 412906135}
 --- !u!4 &1800053304
 Transform:
   m_ObjectHideFlags: 0

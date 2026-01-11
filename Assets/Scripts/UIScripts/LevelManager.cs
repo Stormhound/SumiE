@@ -23,11 +23,8 @@ public class LevelManager : MonoBehaviour
     }
 
     public void LevelPlay(int LevelIndex)
-    {      
-        if(LevelIndex < SceneManager.sceneCountInBuildSettings)
-        {
-            SceneManager.LoadScene(LevelIndex);
-        }
-                      
+    {
+        PlayerPrefs.SetInt("Config", Mathf.Clamp(LevelIndex, 0, 3));
+        SceneManager.LoadScene(1);
     }
 }

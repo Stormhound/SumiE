@@ -9,14 +9,12 @@ public class NextLevel : MonoBehaviour
     {
         if(SceneManager.GetActiveScene().buildIndex >= PlayerPrefs.GetInt("ReachedIndex"))
         {
-            PlayerPrefs.SetInt("ReachedIndex", SceneManager.GetActiveScene().buildIndex + 1);
+            PlayerPrefs.SetInt("ReachedIndex", PlayerPrefs.GetInt("ReachedIndex") + 1);
+            PlayerPrefs.SetInt("Config", Mathf.Clamp(PlayerPrefs.GetInt("UnlockedLevel", 1), 0, 3));
             PlayerPrefs.SetInt("UnlockedLevel", PlayerPrefs.GetInt("UnlockedLevel", 1) + 1);
             PlayerPrefs.Save();
         }
-    }
 
-    public void NextLevelButton()
-    {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex + 1);
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 }

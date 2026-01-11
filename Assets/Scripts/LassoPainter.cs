@@ -18,11 +18,11 @@ public class LassoPainter : MonoBehaviour
     public RawImage outputDisplay;
 
     [Header("Visual Settings")]
-    public Color centerColor = new Color(1, 0, 0, 1f);
+    public Color centerColor => GameManager.Instance && GameManager.Instance.CurrentConfig ? GameManager.Instance.CurrentConfig.centerColor : new Color(1, 0, 0, 1f);
     [Range(0, 10)] public int blurPasses = 3;
     public int blurRadius = 2;
     [Range(0.1f, 1f)] public float resolutionScale = 0.5f;
-    public Color32 enemyColor => GameManager.Instance != null ? GameManager.Instance.enemyColor : new Color32(255, 0, 0, 255);
+    public Color32 enemyColor => GameManager.Instance && GameManager.Instance.CurrentConfig ? GameManager.Instance.CurrentConfig.enemyColor : new Color32(255, 0, 0, 255);
 
     [Tooltip("Distance in pixels from the edge where the ink becomes fully opaque.")]
     public float gradientWidth = 24.0f;
@@ -35,8 +35,8 @@ public class LassoPainter : MonoBehaviour
     public float closeThreshold = 0.5f;
 
     [Header("Ink Settings")]
-    public float maxInk = 100f;
-    public float inkConsumptionRate = 1.0f;
+    public float maxInk => GameManager.Instance && GameManager.Instance.CurrentConfig ? GameManager.Instance.CurrentConfig.maxInk : 100f;
+    public float inkConsumptionRate => GameManager.Instance && GameManager.Instance.CurrentConfig ? GameManager.Instance.CurrentConfig.inkConsumptionRate : 1.0f;
     [SerializeField] private float currentInk;
 
     [Header("Animation")]
@@ -53,7 +53,6 @@ public class LassoPainter : MonoBehaviour
     private Vector2 currentSmoothPos;
     private Vector2 smoothVelocity;
 
-    // Cache
     // Cache
     private int texWidth, texHeight;
     private NativeArray<Color32> backupTextureState;
@@ -84,6 +83,8 @@ public class LassoPainter : MonoBehaviour
     {
         lr = GetComponent<LineRenderer>();
         if (cam == null) cam = Camera.main;
+        
+        // Start full
         currentInk = maxInk;
         
         // Auto-spawn UI
@@ -675,6 +676,7 @@ public class LassoPainter : MonoBehaviour
 
             while (processedCount < targetCount)
             {
+                if (!activeSortKeys.IsCreated) yield break; // Safety exit
                 PixelSortData data = activeSortKeys[processedCount];
                 pixels[data.globalIndex] = data.color;
                 processedCount++;

@@ -5,19 +5,14 @@ public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
 
+    [Header("Configuration")]
+    public System.Collections.Generic.List<LevelConfiguration> availableConfigs;
+    [SerializeField] private LevelConfiguration currentLevelConfig;
+    public LevelConfiguration CurrentConfig => currentLevelConfig;
+
     [Header("Game Progress")]
     [Tooltip("Current visual value (0% to 100%)")]
     [Range(0f, 100f)] public float filledPercentage = 0f;
-
-    [Header("Settings")]
-    [Tooltip("Percentage required to win the level.")]
-    public float winThreshold = 95f;
-    [Tooltip("Percentage of enemy coverage that causes a loss.")]
-    public float loseThreshold = 90f;
-    [Tooltip("Minimum percentage of player ink required to stay alive.")]
-    public float minPlayerInkThreshold = 0.5f;
-    [Tooltip("How fast the progress bar catches up (Higher = Faster).")]
-    public float animationSpeed = 5.0f; // NEW: Controls smoothness
 
     [Header("Events")]
     public UnityEvent<float> OnProgressChanged;
@@ -25,11 +20,31 @@ public class GameManager : MonoBehaviour
 
     private bool levelCompleteTriggered = false;
     private float targetPercentage = 0f; // Stores the actual "Truth"
+    private float animationSpeed = 5.0f; // Can also be in config if desired
 
     void Awake()
     {
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
+
+        // Load Config from PlayerPrefs
+        int configIndex = PlayerPrefs.GetInt("Config", 1); // Default to 1 (assuming 0 might be tutorial or empty, or user preference)
+        
+        // Let's assume indices match the list. If list empty, skip.
+        if (availableConfigs != null && availableConfigs.Count > 0)
+        {
+            // For safety, clamp or modulus
+            // If user wants specific index:
+            if (configIndex >= 0 && configIndex < availableConfigs.Count)
+            {
+                currentLevelConfig = availableConfigs[configIndex];
+            }
+            else
+            {
+                Debug.LogWarning($"[GameManager] Config index {configIndex} out of range (count: {availableConfigs.Count}). Using index 0.");
+                currentLevelConfig = availableConfigs[0];
+            }
+        }
     }
 
     void Update()
@@ -46,12 +61,7 @@ public class GameManager : MonoBehaviour
     public enum TurnState { Player, Enemy }
     public TurnState currentTurn = TurnState.Player;
     
-    [Header("Turn Settings")]
-    public int enemyCount = 3;
-    public int maxTurns = 20;
-    public int enemyStartRadius = 30;
-    public float enemyExpansionPerTurn = 10f;
-    public Color32 enemyColor = new Color32(255, 0, 0, 255);
+    [Header("Turn Events")]
     public UnityEvent OnPlayerTurnStart;
     public UnityEvent OnEnemyTurnStart;
     public UnityEvent<int, int> OnTurnChanged;
@@ -59,8 +69,25 @@ public class GameManager : MonoBehaviour
 
     private int currentTurnCount = 1;
 
+    // --- PROPERTIES (Fallback to defaults if config null) ---
+    public float WinThreshold => currentLevelConfig ? currentLevelConfig.winThreshold : 95f;
+    public float LoseThreshold => currentLevelConfig ? currentLevelConfig.loseThreshold : 90f;
+    public float MinPlayerInkThreshold => currentLevelConfig ? currentLevelConfig.minPlayerInkThreshold : 0.5f;
+    public int MaxTurns => currentLevelConfig ? currentLevelConfig.maxTurns : 20;
+
+    public int EnemyCount => currentLevelConfig ? currentLevelConfig.enemyCount : 3;
+    public int EnemyStartRadius => currentLevelConfig ? currentLevelConfig.enemyStartRadius : 30;
+    public float EnemyExpansionPerTurn => currentLevelConfig ? currentLevelConfig.enemyExpansionPerTurn : 10f;
+    public Color32 EnemyColor => currentLevelConfig ? currentLevelConfig.enemyColor : new Color32(255, 0, 0, 255);
+
+
     void Start()
     {
+        if (currentLevelConfig == null)
+        {
+            Debug.LogWarning("[GameManager] No LevelConfiguration assigned! Using hardcoded defaults.");
+        }
+
         LassoPainter painter = FindFirstObjectByType<LassoPainter>();
         if (painter != null)
         {
@@ -69,13 +96,13 @@ public class GameManager : MonoBehaviour
         }
 
         // Initialize UI with turn count
-        OnTurnChanged?.Invoke(currentTurnCount, maxTurns);
+        OnTurnChanged?.Invoke(currentTurnCount, MaxTurns);
     }
     
     System.Collections.IEnumerator InitEnemiesRoutine(LassoPainter painter)
     {
         yield return null; // Wait for Painter Start
-        painter.InitializeEnemies(enemyCount, enemyStartRadius);
+        painter.InitializeEnemies(EnemyCount, EnemyStartRadius);
     }
 
     public void EndPlayerTurn()
@@ -96,7 +123,7 @@ public class GameManager : MonoBehaviour
         LassoPainter painter = FindFirstObjectByType<LassoPainter>();
         if (painter != null)
         {
-            yield return StartCoroutine(painter.ExpandEnemiesRoutine(enemyExpansionPerTurn));
+            yield return StartCoroutine(painter.ExpandEnemiesRoutine(EnemyExpansionPerTurn));
         }
 
         // End Enemy Turn
@@ -104,9 +131,9 @@ public class GameManager : MonoBehaviour
         
         // CHECK TURN LIMIT
         currentTurnCount++;
-        OnTurnChanged?.Invoke(currentTurnCount, maxTurns);
+        OnTurnChanged?.Invoke(currentTurnCount, MaxTurns);
 
-        if (currentTurnCount > maxTurns)
+        if (currentTurnCount > MaxTurns)
         {
             Debug.Log("Game Over: Max Turns Reached");
             OnGameLost?.Invoke();
@@ -121,8 +148,6 @@ public class GameManager : MonoBehaviour
         OnPlayerTurnStart?.Invoke();
     }
 
-
-
     public void UpdateGameState(int totalPixels, int filledPixels, int enemyPixels)
     {
         if (totalPixels == 0) return;
@@ -132,7 +157,7 @@ public class GameManager : MonoBehaviour
         targetPercentage = ratio * 100f;
 
         // 2. Check Win Condition
-        if (!levelCompleteTriggered && targetPercentage >= winThreshold)
+        if (!levelCompleteTriggered && targetPercentage >= WinThreshold)
         {
             levelCompleteTriggered = true;
             OnLevelComplete?.Invoke();
@@ -143,20 +168,20 @@ public class GameManager : MonoBehaviour
         float enemyRatio = (float)enemyPixels / totalPixels;
         float enemyPercentage = enemyRatio * 100f;
         
-        if (!levelCompleteTriggered && enemyPercentage >= loseThreshold)
+        if (!levelCompleteTriggered && enemyPercentage >= LoseThreshold)
         {
             levelCompleteTriggered = true;
-            Debug.Log($"Game Over: Enemy covered {enemyPercentage:F1}% (Threshold: {loseThreshold}%)");
+            Debug.Log($"Game Over: Enemy covered {enemyPercentage:F1}% (Threshold: {LoseThreshold}%)");
             OnGameLost?.Invoke();
             return;
         }
 
         // 4. Check Lose Condition (Minimum Player Ink)
         // We only check this after the game has "started" (enemyPixels > 0) to avoid frame 0 issues.
-        if (!levelCompleteTriggered && targetPercentage < minPlayerInkThreshold && enemyPixels > 0)
+        if (!levelCompleteTriggered && targetPercentage < MinPlayerInkThreshold && enemyPixels > 0)
         {
             levelCompleteTriggered = true;
-            Debug.Log($"Game Over: Player Ink dropped below {minPlayerInkThreshold}% ({targetPercentage:F1}%)");
+            Debug.Log($"Game Over: Player Ink dropped below {MinPlayerInkThreshold}% ({targetPercentage:F1}%)");
             OnGameLost?.Invoke();
         }
     }

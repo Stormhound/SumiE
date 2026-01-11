@@ -10,19 +10,22 @@ using Random = UnityEngine.Random;
 public class ScatterPoints : MonoBehaviour
 {
     [Header("Settings")]
-    public int pointCount = 20;
+    public int pointCount => GameManager.Instance && GameManager.Instance.CurrentConfig ? GameManager.Instance.CurrentConfig.pointCount : 20;
+
     [Tooltip("Minimum distance between points (0-1 space)")]
-    public float minDistance = 0.2f;
+    public float minDistance => GameManager.Instance && GameManager.Instance.CurrentConfig ? GameManager.Instance.CurrentConfig.minDistance : 0.2f;
+
     [Tooltip("Radius of each blob (0-1 space)")]
-    public float pointRadius = 0.15f;
+    public float pointRadius => GameManager.Instance && GameManager.Instance.CurrentConfig ? GameManager.Instance.CurrentConfig.pointRadius : 0.15f;
+
     [Tooltip("How detailed the collider circles are (vertices per circle)")]
     public int colliderSegments = 16;
 
     [Header("Border Settings")]
-    [Range(0f, 0.2f)] public float edgePadding = 0.01f;
+    [Range(0f, 0.2f)] public float edgePadding => GameManager.Instance && GameManager.Instance.CurrentConfig ? GameManager.Instance.CurrentConfig.edgePadding : 0.01f;
 
     [Header("Visuals")]
-    public Color blobColor = Color.red;
+    public Color blobColor => GameManager.Instance && GameManager.Instance.CurrentConfig ? GameManager.Instance.CurrentConfig.blobColor : Color.red;
 
     private PolygonCollider2D polyCollider;
     private CompositeCollider2D compositeCollider;
