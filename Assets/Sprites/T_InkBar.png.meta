@@ -1,10 +1,31 @@
 fileFormatVersion: 2
-guid: e06682fb5dd726c428a99039cc063f92
+guid: e3a49a864b8716a4f8e7884443e9e69b
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 9025269906177742027
-    second: T_Brush_0
+      213: 2034286263878463535
+    second: 7e75aece-dff8-4dd3-92c3-26f64b60d94e_removalai_preview_0
+  - first:
+      213: -8035199350642552371
+    second: 7e75aece-dff8-4dd3-92c3-26f64b60d94e_removalai_preview_1
+  - first:
+      213: 4401196292591518283
+    second: 7e75aece-dff8-4dd3-92c3-26f64b60d94e_removalai_preview_2
+  - first:
+      213: 4386362342906851780
+    second: 7e75aece-dff8-4dd3-92c3-26f64b60d94e_removalai_preview_3
+  - first:
+      213: -5531971062923051275
+    second: 7e75aece-dff8-4dd3-92c3-26f64b60d94e_removalai_preview_4
+  - first:
+      213: 7087997611863425620
+    second: 7e75aece-dff8-4dd3-92c3-26f64b60d94e_removalai_preview_5
+  - first:
+      213: 6600772569002980126
+    second: 7e75aece-dff8-4dd3-92c3-26f64b60d94e_removalai_preview_6
+  - first:
+      213: 2958706188765332797
+    second: 7e75aece-dff8-4dd3-92c3-26f64b60d94e_removalai_preview_7
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -72,7 +93,7 @@ TextureImporter:
   platformSettings:
   - serializedVersion: 4
     buildTarget: DefaultTexturePlatform
-    maxTextureSize: 512
+    maxTextureSize: 2048
     resizeAlgorithm: 0
     textureFormat: -1
     textureCompression: 1
@@ -100,23 +121,23 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: T_Brush_0
+      name: T_InkBar_0
       rect:
         serializedVersion: 2
-        x: 0
-        y: 0
-        width: 512
-        height: 512
+        x: 10
+        y: 115
+        width: 344
+        height: 140
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: -1
+      tessellationDetail: 0
       bones: []
-      spriteID: bc45fb76923304d70800000000000000
-      internalID: 9025269906177742027
+      spriteID: bf176cceed939f54d8ba27e85e5fbe57
+      internalID: -278269691
       vertices: []
       indices: 
       edges: []
@@ -133,9 +154,21 @@ TextureImporter:
     weights: []
     secondaryTextures: []
     spriteCustomMetadata:
-      entries: []
+      entries:
+      - key: SpriteEditor.SliceSettings
+        value: '{"sliceOnImport":false,"gridCellCount":{"x":1.0,"y":1.0},"gridSpriteSize":{"x":64.0,"y":64.0},"gridSpriteOffset":{"x":0.0,"y":0.0},"gridSpritePadding":{"x":0.0,"y":0.0},"pivot":{"x":0.5,"y":0.5},"pivotPixels":{"x":0.0,"y":0.0},"autoSlicingMethod":0,"spriteAlignment":0,"pivotUnitMode":0,"slicingType":0,"keepEmptyRects":false,"isAlternate":false}'
     nameFileIdTable:
-      T_Brush_0: 9025269906177742027
+      T_InkBar_0: -278269691
+      T_InkBar_1: 1748803947
+      T_InkBar_10: 238825924
+      T_InkBar_2: 1844400976
+      T_InkBar_3: -581994954
+      T_InkBar_4: 100067460
+      T_InkBar_5: 1019210579
+      T_InkBar_6: 672355813
+      T_InkBar_7: -1779121894
+      T_InkBar_8: -185789907
+      T_InkBar_9: 1382991669
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
