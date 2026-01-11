@@ -543,9 +543,6 @@ public class LassoPainter : MonoBehaviour
         NativeArray<Color32> pixels = drawTexture.GetRawTextureData<Color32>();
 
         // 1. CHECK CAPTURES
-        // If center of seed has Alpha > 0, it is captured.
-        // We run a job to update the 'active' state of seeds.
-        
         var captureJob = new CheckCapturesJob
         {
             pixelData = pixels,
@@ -555,7 +552,21 @@ public class LassoPainter : MonoBehaviour
         };
         captureJob.Schedule(enemySeeds.Length, 32).Complete();
         
-        // Update Count UI
+        // 2. SHRINK RADII (Collision with Player Ink)
+        // If the enemy overlaps player ink, shrink the radius to the contact point.
+        // This ensures they expand "from" the conflict line, rather than jumping over it.
+        var shrinkJob = new ShrinkRadiiJob
+        {
+            pixelData = pixels,
+            seeds = enemySeeds.AsArray(),
+            width = texWidth,
+            height = texHeight,
+            enemyColor = enemyColor
+        };
+        shrinkJob.Schedule(enemySeeds.Length, 4).Complete();
+
+
+        // Update Count UI & Check Win
         int activeCount = 0;
         for (int i=0; i<enemySeeds.Length; i++) if (enemySeeds[i].active == 1) activeCount++;
         if (activeCount == 0)
@@ -565,10 +576,9 @@ public class LassoPainter : MonoBehaviour
             yield break;
         }
 
-        // 2. ANIMATE EXPANSION
+        // 3. ANIMATE EXPANSION
         float startTime = Time.time;
         
-        // Copy current states to temp to interpolate from
         NativeArray<float> startRadii = new NativeArray<float>(enemySeeds.Length, Allocator.Persistent);
         
         try
@@ -580,7 +590,6 @@ public class LassoPainter : MonoBehaviour
                 float t = (Time.time - startTime) / enemyExpansionDuration;
                 float smoothT = 1f - (1f - t) * (1f - t); // EaseOut
 
-                // Update persistent radii for the *current frame* calculation
                 for (int i=0; i<enemySeeds.Length; i++)
                 {
                     if (enemySeeds[i].active == 1)
@@ -594,7 +603,7 @@ public class LassoPainter : MonoBehaviour
                 var job = new ExpandActiveSeedsJob
                 {
                     pixelData = pixels,
-                    seeds = enemySeeds, // Uses current interpolated radii
+                    seeds = enemySeeds,
                     width = texWidth,
                     height = texHeight,
                     fillColor = enemyColor
@@ -616,7 +625,7 @@ public class LassoPainter : MonoBehaviour
                 }
             }
             
-            // Final Erase Pass
+            // Final Pass
             new ExpandActiveSeedsJob
             {
                 pixelData = pixels,
@@ -633,7 +642,7 @@ public class LassoPainter : MonoBehaviour
             if (startRadii.IsCreated) startRadii.Dispose();
         }
 
-        // 3. Update Physics & Game State
+        // 4. Update Physics & Game State
         ScatterPoints sp = FindFirstObjectByType<ScatterPoints>();
         if (sp) sp.UpdateColliderFromTexture(drawTexture, enemyColor);
 
@@ -762,6 +771,55 @@ struct CheckCapturesJob : IJobParallelFor
                 seeds[index] = s;
             }
         }
+    }
+}
+
+[BurstCompile]
+struct ShrinkRadiiJob : IJobParallelFor
+{
+    [ReadOnly] public NativeArray<Color32> pixelData;
+    public NativeArray<LassoPainter.EnemySeed> seeds;
+    public int width, height;
+    public Color32 enemyColor;
+
+    public void Execute(int index)
+    {
+        var s = seeds[index];
+        if (s.active == 0) return;
+
+        float validRadius = s.radius;
+        int r = (int)Mathf.Ceil(s.radius);
+        int2 center = s.pos;
+        
+        // Scan bounding box
+        for (int y = -r; y <= r; y++)
+        {
+            for (int x = -r; x <= r; x++)
+            {
+                int px = center.x + x;
+                int py = center.y + y;
+                
+                if (px < 0 || px >= width || py < 0 || py >= height) continue;
+                
+                int pIdx = py * width + px;
+                Color32 c = pixelData[pIdx];
+                
+                // Is this player ink?
+                bool isEnemy = (c.r == enemyColor.r && c.g == enemyColor.g && c.b == enemyColor.b);
+                if (c.a > 0 && !isEnemy)
+                {
+                    // Collision found. Check distance.
+                    float dist = Mathf.Sqrt(x*x + y*y);
+                    if (dist < validRadius)
+                    {
+                        validRadius = dist;
+                    }
+                }
+            }
+        }
+        
+        s.radius = validRadius;
+        seeds[index] = s;
     }
 }
 
