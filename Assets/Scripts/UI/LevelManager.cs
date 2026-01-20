@@ -15,10 +15,20 @@ public class LevelManager : MonoBehaviour
         for (int i = 0; i < LevelButtons.Length; i++)
         {
             LevelButtons[i].interactable = false;
+
+            if (LevelButtons[i].TryGetComponent<UIAnimator>(out UIAnimator anim))
+            {
+                anim.enabled = false;
+            }
         }
         for(int i = 0; i < unlockedlevel; i++)
         {
             LevelButtons[i].interactable = true;
+
+            if (LevelButtons[i].TryGetComponent<UIAnimator>(out UIAnimator anim))
+            {
+                anim.enabled = true;
+            }
         }
     }
 

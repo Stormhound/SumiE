@@ -816,8 +816,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 33, y: -96}
-  m_SizeDelta: {x: 600, y: 500}
+  m_AnchoredPosition: {x: 33, y: -193}
+  m_SizeDelta: {x: 600, y: 694}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &536262522
 GameObject:
@@ -1051,8 +1051,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 350, y: 150}
+  m_AnchoredPosition: {x: 1.2, y: 41.00003}
+  m_SizeDelta: {x: 352, y: 216.8}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &555259342
 MonoBehaviour:
@@ -1130,7 +1130,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 1814253830159082508, guid: d4832b26f3957354087a98ce6eaf0bf9, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 59690f2b8baa56048837eb9cfffc580f, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -1252,7 +1252,7 @@ RectTransform:
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 0}
   m_AnchoredPosition: {x: -118.2733, y: 112.5}
-  m_SizeDelta: {x: 146.5466, y: 175}
+  m_SizeDelta: {x: 163, y: 147}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &788146948
 MonoBehaviour:
@@ -1268,8 +1268,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MusicToggleButton
   toggleButton: {fileID: 788146949}
   buttonImage: {fileID: 788146950}
-  musicOnIcon: {fileID: 21300000, guid: 827b5aaa07af8a849a83970a41adbbcb, type: 3}
-  musicOffIcon: {fileID: 21300000, guid: 19c779708a946f14a9ef32e5d34bc47c, type: 3}
+  musicOnIcon: {fileID: 21300000, guid: fd91782a748331f43ac977201fdc4266, type: 3}
+  musicOffIcon: {fileID: 21300000, guid: d8ad1cbc1c1d18c4b9297166ff2ef476, type: 3}
   musicSource: {fileID: 946961666}
 --- !u!114 &788146949
 MonoBehaviour:
@@ -1335,7 +1335,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 827b5aaa07af8a849a83970a41adbbcb, type: 3}
+  m_Sprite: {fileID: 21300000, guid: fd91782a748331f43ac977201fdc4266, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -1560,8 +1560,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 175}
-  m_SizeDelta: {x: 400, y: 150}
+  m_AnchoredPosition: {x: 0, y: 248.20001}
+  m_SizeDelta: {x: 349.6, y: 197.6}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &833283025
 MonoBehaviour:
@@ -1639,7 +1639,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 2641698482785147981, guid: e3825466a5aaf2a46a834a063ff79244, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 5a987a4eb1260244fba21b599e31a3d7, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -2956,8 +2956,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: -175}
-  m_SizeDelta: {x: 300, y: 135}
+  m_AnchoredPosition: {x: 1.2, y: -158.89996}
+  m_SizeDelta: {x: 278, y: 183}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &2042041079
 MonoBehaviour:
@@ -3035,7 +3035,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 7175521830830924091, guid: 41a8c7cb7feb3aa408f2d4e5f4da4ecf, type: 3}
+  m_Sprite: {fileID: 21300000, guid: e21f1d846e759bb4394a5316d0d1e3cb, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -3281,7 +3281,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: -741085305064360840, guid: 865417c8f7bfd0a4ea2f832da904ae17, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 8d8d84c88debb414eb9b78f5f867f6c2, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1

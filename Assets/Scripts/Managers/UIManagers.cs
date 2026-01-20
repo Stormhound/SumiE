@@ -38,8 +38,15 @@ public class UIManagers : MonoBehaviour
         LevelMenu?.SetActive(false);
         MainMenu.SetActive(true);
     }
- 
     
+    public void LoadMenu()
+    {
+        SceneManager.LoadScene(0);
+    }
+    public void Restart()
+    {
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
 }
 
 

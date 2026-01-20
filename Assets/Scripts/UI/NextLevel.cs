@@ -1,17 +1,25 @@
-using Unity.VectorGraphics;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using UnityEngine.UI;
 
 public class NextLevel : MonoBehaviour
 {
     public void UnlockNewLevel()
     {
-        if(SceneManager.GetActiveScene().buildIndex >= PlayerPrefs.GetInt("ReachedIndex"))
+        if(PlayerPrefs.GetInt("Config", 0) < GameManager.Instance.availableConfigs.Count - 1)
         {
             PlayerPrefs.SetInt("ReachedIndex", PlayerPrefs.GetInt("ReachedIndex") + 1);
-            PlayerPrefs.SetInt("Config", Mathf.Clamp(PlayerPrefs.GetInt("UnlockedLevel", 1), 0, 3));
+            PlayerPrefs.SetInt("Config", PlayerPrefs.GetInt("Config", 0) + 1);
+
+            Debug.LogWarning($"Next Level: {PlayerPrefs.GetInt("Config", 0) + 1}");
+
             PlayerPrefs.SetInt("UnlockedLevel", PlayerPrefs.GetInt("UnlockedLevel", 1) + 1);
+            PlayerPrefs.Save();
+        }
+        else
+        {
+            Debug.LogWarning($"Baþa Dönüldü");
+
+            PlayerPrefs.SetInt("Config", 0);
             PlayerPrefs.Save();
         }
 
