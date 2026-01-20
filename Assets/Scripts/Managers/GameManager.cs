@@ -27,14 +27,42 @@ public class GameManager : MonoBehaviour
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
 
+        // --- LEVEL GENERATION ---
+        if (availableConfigs == null || availableConfigs.Count == 0)
+        {
+            Debug.Log("[GameManager] No levels found. Generating default levels...");
+            availableConfigs = new System.Collections.Generic.List<LevelConfiguration>();
+
+            // Level 1: Standard (Not too easy)
+            // 2 Enemies, decent start size. Standard consumption.
+            availableConfigs.Add(CreateLevel("Level 1 (Standard)", 
+                win: 70f, lose: 95f, turns: 25, 
+                ink: 120f, enemies: 2, expansion: 6f, radius: 25, consumption: 1.0f));
+
+            // Level 2: Challenge
+            // 3 Enemies, growing faster. Slightly higher consumption.
+            availableConfigs.Add(CreateLevel("Level 2 (Challenge)", 
+                win: 80f, lose: 85f, turns: 22, 
+                ink: 100f, enemies: 3, expansion: 9f, radius: 30, consumption: 1.1f));
+
+            // Level 3: Hard (High Pressure)
+            // 4 Enemies, fast growth, easier to lose.
+            availableConfigs.Add(CreateLevel("Level 3 (Hard)", 
+                win: 90f, lose: 75f, turns: 18, 
+                ink: 90f, enemies: 4, expansion: 12f, radius: 35, consumption: 1.25f));
+
+            // Level 4: Expert (Precision)
+            // 5 Enemies, very expensive ink, very fast growth. Low lose threshold.
+            availableConfigs.Add(CreateLevel("Level 4 (Expert)", 
+                win: 95f, lose: 60f, turns: 15, 
+                ink: 80f, enemies: 5, expansion: 15f, radius: 40, consumption: 1.5f));
+        }
+
         // Load Config from PlayerPrefs
-        int configIndex = PlayerPrefs.GetInt("Config", 1); // Default to 1 (assuming 0 might be tutorial or empty, or user preference)
+        int configIndex = PlayerPrefs.GetInt("Config", 0); // Default to 0 (First Level)
         
-        // Let's assume indices match the list. If list empty, skip.
         if (availableConfigs != null && availableConfigs.Count > 0)
         {
-            // For safety, clamp or modulus
-            // If user wants specific index:
             if (configIndex >= 0 && configIndex < availableConfigs.Count)
             {
                 currentLevelConfig = availableConfigs[configIndex];
@@ -45,6 +73,27 @@ public class GameManager : MonoBehaviour
                 currentLevelConfig = availableConfigs[0];
             }
         }
+    }
+
+    private LevelConfiguration CreateLevel(string name, float win, float lose, int turns, float ink, int enemies, float expansion, int radius, float consumption)
+    {
+        LevelConfiguration config = ScriptableObject.CreateInstance<LevelConfiguration>();
+        config.name = name;
+        config.winThreshold = win;
+        config.loseThreshold = lose;
+        config.maxTurns = turns;
+        config.maxInk = ink;
+        config.enemyCount = enemies;
+        config.enemyExpansionPerTurn = expansion;
+        config.enemyStartRadius = radius;
+        config.inkConsumptionRate = consumption;
+        
+        // Defaults / Scaled
+        config.minPlayerInkThreshold = 0.5f;
+        config.enemyColor = new Color32(255, 0, 0, 255);
+        config.centerColor = new Color(1, 0, 0, 1f);
+        
+        return config;
     }
 
     void Update()

@@ -13,15 +13,15 @@ MonoBehaviour:
   m_Name: Level04
   m_EditorClassIdentifier: Assembly-CSharp::LevelConfiguration
   winThreshold: 95
-  loseThreshold: 90
+  loseThreshold: 60
   minPlayerInkThreshold: 0.15
   maxTurns: 10
-  maxInk: 100
+  maxInk: 80
   inkConsumptionRate: 10
   centerColor: {r: 1, g: 1, b: 1, a: 1}
-  enemyCount: 3
-  enemyStartRadius: 30
-  enemyExpansionPerTurn: 50
+  enemyCount: 5
+  enemyStartRadius: 55
+  enemyExpansionPerTurn: 37.5
   enemyColor:
     serializedVersion: 2
     rgba: 4278190335

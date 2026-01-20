@@ -12,16 +12,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 52df0d38a4716e2499c14a8665505e10, type: 3}
   m_Name: Level01
   m_EditorClassIdentifier: Assembly-CSharp::LevelConfiguration
-  winThreshold: 95
-  loseThreshold: 90
+  winThreshold: 70
+  loseThreshold: 95
   minPlayerInkThreshold: 0.15
   maxTurns: 20
-  maxInk: 100
-  inkConsumptionRate: 5
+  maxInk: 120
+  inkConsumptionRate: 10
   centerColor: {r: 1, g: 1, b: 1, a: 1}
-  enemyCount: 5
+  enemyCount: 2
   enemyStartRadius: 30
-  enemyExpansionPerTurn: 20
+  enemyExpansionPerTurn: 15
   enemyColor:
     serializedVersion: 2
     rgba: 4278190335
