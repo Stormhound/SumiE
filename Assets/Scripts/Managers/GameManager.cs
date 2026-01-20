@@ -136,6 +136,9 @@ public class GameManager : MonoBehaviour
         if (currentTurnCount > MaxTurns)
         {
             Debug.Log("Game Over: Max Turns Reached");
+            // Trigger Lose Sequence
+            levelCompleteTriggered = true;
+            if (painter != null) yield return StartCoroutine(painter.FillCanvasRoutine(EnemyColor));
             OnGameLost?.Invoke();
             // Do not switch back to player turn
             yield break;
@@ -172,7 +175,12 @@ public class GameManager : MonoBehaviour
         {
             levelCompleteTriggered = true;
             Debug.Log($"Game Over: Enemy covered {enemyPercentage:F1}% (Threshold: {LoseThreshold}%)");
-            OnGameLost?.Invoke();
+            
+            // Trigger Animation
+            LassoPainter painter = FindFirstObjectByType<LassoPainter>();
+            if (painter != null) StartCoroutine(TriggerLoseSequence(painter));
+            else OnGameLost?.Invoke();
+
             return;
         }
 
@@ -182,8 +190,18 @@ public class GameManager : MonoBehaviour
         {
             levelCompleteTriggered = true;
             Debug.Log($"Game Over: Player Ink dropped below {MinPlayerInkThreshold}% ({targetPercentage:F1}%)");
-            OnGameLost?.Invoke();
+            
+            // Trigger Animation
+            LassoPainter painter = FindFirstObjectByType<LassoPainter>();
+            if (painter != null) StartCoroutine(TriggerLoseSequence(painter));
+            else OnGameLost?.Invoke();
         }
+    }
+
+    private System.Collections.IEnumerator TriggerLoseSequence(LassoPainter painter)
+    {
+        yield return StartCoroutine(painter.FillCanvasRoutine(EnemyColor));
+        OnGameLost?.Invoke();
     }
 
 

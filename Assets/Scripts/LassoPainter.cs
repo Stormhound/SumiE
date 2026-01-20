@@ -572,7 +572,7 @@ public class LassoPainter : MonoBehaviour
         if (activeCount == 0)
         {
             Debug.Log("[LassoPainter] All enemies captured! Filling canvas...");
-            yield return StartCoroutine(FillAllRoutine());
+            yield return StartCoroutine(FillCanvasRoutine(centerColor));
             yield break;
         }
 
@@ -649,7 +649,7 @@ public class LassoPainter : MonoBehaviour
         CalculateAndReportProgress();
     }
 
-    public IEnumerator FillAllRoutine()
+    public IEnumerator FillCanvasRoutine(Color32 fillTargetColor)
     {
         if (drawTexture == null) yield break;
 
@@ -664,9 +664,8 @@ public class LassoPainter : MonoBehaviour
         {
             pixelData = pixels,
             sortList = activeSortKeys,
-            targetColor = centerColor,
-            seed = (uint)UnityEngine.Random.Range(1, 100000),
-            enemyColor = enemyColor
+            targetColor = fillTargetColor,
+            seed = (uint)UnityEngine.Random.Range(1, 100000)
         };
         collectJob.Schedule().Complete();
         
@@ -718,19 +717,22 @@ struct CollectEmptyPixelsJob : IJob
     public NativeList<PixelSortData> sortList;
     public Color32 targetColor;
     public uint seed;
-    public Color32 enemyColor;
 
     public void Execute()
     {
         Unity.Mathematics.Random rng = new Unity.Mathematics.Random(seed);
         for (int i = 0; i < pixelData.Length; i++)
         {
-            // Fill anything that isn't already fully opaque to ensure seamless blend
-            // AND Treat Enemy (Red) as Empty/Overwriteable
             Color32 c = pixelData[i];
-            bool isEnemy = (c.r == enemyColor.r && c.g == enemyColor.g && c.b == enemyColor.b);
             
-            if (c.a < 255 || isEnemy)
+            // Generic Logic: Overwrite anything that is NOT the target color
+            // This works for "Win" (Target=Player, overwrites Enemy & Empty)
+            // And for "Lose" (Target=Enemy, overwrites Player & Empty)
+            // Assuming Target has alpha=255.
+            
+            bool isTarget = (c.r == targetColor.r && c.g == targetColor.g && c.b == targetColor.b && c.a == 255);
+            
+            if (!isTarget)
             {
                 sortList.Add(new PixelSortData 
                 { 
